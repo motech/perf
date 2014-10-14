@@ -1,0 +1,28 @@
+<div id="inner-center" class="instance-info inner-center ui-layout-center ui-layout-pane ui-layout-pane-center">
+    <div class="header-footer-breadcrumb">
+        <ul class="breadcrumb" role="navigation">
+            <li><a role="menu" href=".">{{msg('server.home')}}</a></li>
+            <li ng-show="active('#/instance-info/info')" ng-class="active('#/instance-info/info')">{{msg('instance-info.web.info.title')}}</li>
+        </ul>
+    </div>
+    <div class="header-footer">
+        <ul id="content-tabs" class="nav nav-tabs">
+            <li ng-class="active('#/instance-info/info')"><a href="#/instance-info/info">{{msg('instance-info.web.info.title')}}</a></li>
+        </ul>
+    </div>
+    <div class="ui-layout-content">
+        <div class="tab-content" id="tab-content">
+            <div id="main-content" class="active">
+                <div ng-view></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="inner-east" class="instance-info inner-east ui-layout-pane ui-layout-pane-east">
+    <div class="header-toolbar header-footer"></div>
+    <div class="ui-layout-content">
+        <div class="inside">
+        </div>
+    </div>
+</div>
