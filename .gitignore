@@ -1,12 +1,22 @@
+*~
+*#
+.DS_Store
+.classpath
+.project
+.settings/
+target/
+.externalToolBuilders/
+maven-eclipse.xml
+.idea/
+*.iml
+*.ipr
+*.iws
 *.class
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.ear
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
+*.log*
+Motech.log*
+debug.txt
+out/
+Error_log/
+test-output/
+felix-cache/
+*.tmp
