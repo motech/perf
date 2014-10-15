@@ -37,7 +37,7 @@ public class PerfController {
 
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/send-receive-event")
+    @RequestMapping(value = "/send-and-receive-event")
     public String sendReceiveEvent() {
         return perfService.doSendAndReceiveEvent();
     }

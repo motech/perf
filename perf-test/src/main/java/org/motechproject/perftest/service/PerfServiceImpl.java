@@ -19,7 +19,7 @@ public class PerfServiceImpl implements PerfService {
     private Logger logger = LoggerFactory.getLogger(this.getClass());
     private EventRelay eventRelay;
     private final Set<String> eventNumbers = new HashSet<String>();
-    private long eventCount = 0;
+    private static long eventCount = 0;
 
     private class PerfTimer {
         private String name;
@@ -31,7 +31,7 @@ public class PerfServiceImpl implements PerfService {
         }
 
         public String elapsedMillis() {
-            return String.format("%s: %d", name, System.currentTimeMillis() - startTime);
+            return String.format("%s: %dms", name, System.currentTimeMillis() - startTime);
         }
     }
 
@@ -73,6 +73,7 @@ public class PerfServiceImpl implements PerfService {
         synchronized (eventNumbers) {
             eventNumbers.remove(eventNumber);
         }
+        logger.debug("Removed eventNumber " + eventNumber);
     }
 
     public String doSendAndReceiveEvent() {
@@ -93,15 +94,15 @@ public class PerfServiceImpl implements PerfService {
         eventRelay.sendEventMessage(event);
 
         while (true) {
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
             synchronized (eventNumbers) {
                 if (!eventNumbers.contains(eventNumber)) {
                     break;
                 }
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
 
