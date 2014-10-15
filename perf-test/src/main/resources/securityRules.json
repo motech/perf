@@ -1,0 +1,17 @@
+[
+    {
+        "active": true,
+        "pattern": "/**/perf-test/**",
+        "supportedSchemes": [
+            "NO_SECURITY"
+        ],
+        "protocol": "HTTP",
+        "priority": 2,
+        "rest": true,
+        "origin": "SYSTEM_MODULE_PERF_TEST",
+        "version": "0.25",
+        "methodsRequired": [
+            "GET"
+        ]
+    }
+]
