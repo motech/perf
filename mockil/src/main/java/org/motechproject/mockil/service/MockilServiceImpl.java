@@ -53,7 +53,7 @@ public class MockilServiceImpl implements MockilService {
         return String.format("ExternalId%d", numCampaign++);
     }
 
-    public void create(String campaignName, Integer minutes) {
+    public void create(String campaignName, String minutes) {
         logger.debug("create({}, {})", campaignName, minutes);
 
         CampaignRecord campaign = new CampaignRecord();

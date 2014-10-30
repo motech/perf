@@ -26,7 +26,7 @@ public class MockilController {
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
     @RequestMapping(value = "/create/{campaignName}/{minutes}")
-    public String create(@PathVariable String campaignName, @PathVariable Integer minutes) {
+    public String create(@PathVariable String campaignName, @PathVariable String minutes) {
         mockilService.create(campaignName, minutes);
         return "OK";
     }
