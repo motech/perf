@@ -53,7 +53,7 @@ public class MockilServiceImpl implements MockilService {
         return String.format("ExternalId%d", numCampaign++);
     }
 
-    public void create(String campaignName, String minutes) {
+    public void create(String campaignName, int minutes) {
         logger.debug("create({}, {})", campaignName, minutes);
 
         CampaignRecord campaign = new CampaignRecord();
@@ -63,7 +63,7 @@ public class MockilServiceImpl implements MockilService {
         CampaignMessageRecord message = new CampaignMessageRecord();
         message.setName("firstMessage");
         message.setStartTime("00:00");
-        message.setTimeOffset("00:05");
+        message.setTimeOffset(String.format("%d minute%s", minutes, minutes > 1 ? "s" : ""));
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
