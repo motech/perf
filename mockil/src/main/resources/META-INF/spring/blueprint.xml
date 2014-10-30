@@ -27,6 +27,8 @@
 
     <osgi:service ref="mockilService" interface="org.motechproject.mockil.service.MockilService" />
 
+    <osgi:reference id="messageCampaignService" interface="org.motechproject.messagecampaign.service.MessageCampaignService"/>
+
     <osgi:reference id="eventRelay" interface="org.motechproject.event.listener.EventRelay"/>
 
 </beans>

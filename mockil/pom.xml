@@ -50,6 +50,11 @@
             <artifactId>motech-platform-event</artifactId>
             <version>0.25-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>org.motechproject</groupId>
+            <artifactId>message-campaign</artifactId>
+            <version>0.25-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <build>

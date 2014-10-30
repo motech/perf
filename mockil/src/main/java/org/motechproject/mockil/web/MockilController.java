@@ -25,9 +25,17 @@ public class MockilController {
 
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/enroll")
-    public String sendMockilEvent(@RequestParam Map<String, String> params, HttpServletResponse response) {
-        mockilService.enroll(params);
+    @RequestMapping(value = "/create/{campaignName}/{minutes}")
+    public String create(@PathVariable String campaignName, @PathVariable Integer minutes) {
+        mockilService.create(campaignName, minutes);
+        return "OK";
+    }
+
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/enroll/{campaignName}")
+    public String enroll(@PathVariable String campaignName) {
+        mockilService.enroll(campaignName);
         return "OK";
     }
 
