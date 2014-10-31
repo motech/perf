@@ -9,8 +9,6 @@ import org.motechproject.event.listener.annotations.MotechListener;
 import org.motechproject.messagecampaign.EventKeys;
 import org.motechproject.messagecampaign.contract.CampaignRequest;
 import org.motechproject.messagecampaign.domain.campaign.CampaignType;
-import org.motechproject.messagecampaign.domain.message.CampaignMessage;
-import org.motechproject.messagecampaign.domain.message.OffsetCampaignMessage;
 import org.motechproject.messagecampaign.service.MessageCampaignService;
 import org.motechproject.messagecampaign.userspecified.CampaignMessageRecord;
 import org.motechproject.messagecampaign.userspecified.CampaignRecord;
@@ -19,13 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-import static org.joda.time.Period.days;
-import static org.joda.time.Period.minutes;
 
 @Service("mockilService")
 public class MockilServiceImpl implements MockilService {
@@ -45,16 +37,20 @@ public class MockilServiceImpl implements MockilService {
     }
 
     @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
-    public void handleCFiredCampaignMEssage(MotechEvent event) {
-        logger.debug("handleCFiredCampaignMEssage({})", event.toString());
+    public void handleFiredCampaignMessage(MotechEvent event) {
+        logger.debug("handleFiredCampaignMessage({})", event.toString());
     }
 
     private synchronized String getNextId() {
         return String.format("ExternalId%d", numCampaign++);
     }
 
-    public void create(String campaignName, int minutes) {
-        logger.debug("create({}, {})", campaignName, minutes);
+    private String decodeDelay(String delay) {
+        return delay.replaceAll("[^a-zA-Z0-9]", " ");
+    }
+
+    public void create(String campaignName, String delay) {
+        logger.debug("create({}, {})", campaignName, delay);
 
         CampaignRecord campaign = new CampaignRecord();
         campaign.setName(campaignName);
@@ -63,10 +59,23 @@ public class MockilServiceImpl implements MockilService {
         CampaignMessageRecord message = new CampaignMessageRecord();
         message.setName("firstMessage");
         message.setStartTime("00:00");
-        message.setTimeOffset(String.format("%d minute%s", minutes, minutes > 1 ? "s" : ""));
+        message.setTimeOffset(decodeDelay(delay));
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
+    }
+
+    public void delete(String campaignName) {
+        logger.debug("delete({})", campaignName);
+
+        messageCampaignService.deleteCampaign(campaignName);
+    }
+
+    public void enrollMany(String campaignName, int number) {
+        logger.debug("enrollMany({}, {})", campaignName, number);
+        for (int i = 0 ; i < number ; i++) {
+            enroll(campaignName);
+        }
     }
 
     public void enroll(String campaignName) {

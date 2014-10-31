@@ -3,12 +3,12 @@ package org.motechproject.mockil.web;
 import org.motechproject.mockil.service.MockilService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.*;
-
-import javax.servlet.http.HttpServletResponse;
-import java.util.Map;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * Responds to HTTP queries to {motech-server}/module/mockil/enroll and enrolls an expecting mother
@@ -25,9 +25,17 @@ public class MockilController {
 
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create/{campaignName}/{minutes}")
-    public String create(@PathVariable String campaignName, @PathVariable int minutes) {
-        mockilService.create(campaignName, minutes);
+    @RequestMapping(value = "/create/{campaignName}/{delay}")
+    public String create(@PathVariable String campaignName, @PathVariable String delay) {
+        mockilService.create(campaignName, delay);
+        return "OK";
+    }
+
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/delete/{campaignName}")
+    public String delete(@PathVariable String campaignName) {
+        mockilService.delete(campaignName);
         return "OK";
     }
 
@@ -36,6 +44,14 @@ public class MockilController {
     @RequestMapping(value = "/enroll/{campaignName}")
     public String enroll(@PathVariable String campaignName) {
         mockilService.enroll(campaignName);
+        return "OK";
+    }
+
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/enroll/{campaignName}/{number}")
+    public String enrollMany(@PathVariable String campaignName, @PathVariable int number) {
+        mockilService.enrollMany(campaignName, number);
         return "OK";
     }
 
