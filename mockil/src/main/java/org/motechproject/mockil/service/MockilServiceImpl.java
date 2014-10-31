@@ -26,31 +26,66 @@ public class MockilServiceImpl implements MockilService {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
     private MessageCampaignService messageCampaignService;
-    private Integer numCampaign;
     private EventRelay eventRelay;
+
 
     @Autowired
     public MockilServiceImpl(EventRelay eventRelay, MessageCampaignService messageCampaignService) {
         this.eventRelay = eventRelay;
         this.messageCampaignService = messageCampaignService;
-        numCampaign = 0;
     }
+
 
     @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
     public void handleFiredCampaignMessage(MotechEvent event) {
         logger.debug("handleFiredCampaignMessage({})", event.toString());
     }
 
-    private synchronized String getNextId() {
-        return String.format("ExternalId%d", numCampaign++);
+
+    private LocalDate extractDate(String datetime) {
+        String date = datetime.replaceAll("([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])(.*)",
+                "$1-$3-$5");
+        return new LocalDate(date);
     }
+
+    private String extractTime(String datetime) {
+        String time = datetime.replaceAll("([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])(.*)",
+                "$7:$9");
+        return time;
+    }
+
+    public void createAbsolute(String campaignName, String datetime) {
+        logger.debug("createAbsolute({}, {})", campaignName, datetime);
+
+        LocalDate date = extractDate(datetime);
+        String time = extractTime(datetime);
+
+        CampaignRecord campaign = new CampaignRecord();
+        campaign.setName(campaignName);
+        campaign.setCampaignType(CampaignType.ABSOLUTE);
+
+        CampaignMessageRecord message = new CampaignMessageRecord();
+        message.setName("firstMessage");
+        message.setDate(date);
+        message.setStartTime(time);
+
+        campaign.setMessages(Arrays.asList(message));
+        messageCampaignService.saveCampaign(campaign);
+        logger.debug("Successfully created Absolute campaign on {} at {}", date.toString(), time);
+    }
+
 
     private String decodeDelay(String delay) {
-        return delay.replaceAll("[^a-zA-Z0-9]", " ");
+        String s = delay.replaceAll("[^a-zA-Z0-9]", " ");
+        s = s.replaceAll("([0-9])([a-z])", "$2 $1");
+        return s;
     }
 
-    public void create(String campaignName, String delay) {
-        logger.debug("create({}, {})", campaignName, delay);
+
+    public void createOffset(String campaignName, String delay) {
+        logger.debug("createOffset({}, {})", campaignName, delay);
+
+        String period = decodeDelay(delay);
 
         CampaignRecord campaign = new CampaignRecord();
         campaign.setName(campaignName);
@@ -59,11 +94,14 @@ public class MockilServiceImpl implements MockilService {
         CampaignMessageRecord message = new CampaignMessageRecord();
         message.setName("firstMessage");
         message.setStartTime("00:00");
-        message.setTimeOffset(decodeDelay(delay));
+        message.setTimeOffset(period);
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
+
+        logger.debug("Successfully created Offset campaign: {}", period);
     }
+
 
     public void delete(String campaignName) {
         logger.debug("delete({})", campaignName);
@@ -71,18 +109,18 @@ public class MockilServiceImpl implements MockilService {
         messageCampaignService.deleteCampaign(campaignName);
     }
 
-    public void enrollMany(String campaignName, int number) {
-        logger.debug("enrollMany({}, {})", campaignName, number);
-        for (int i = 0 ; i < number ; i++) {
-            enroll(campaignName);
-        }
-    }
 
-    public void enroll(String campaignName) {
+    public void enroll(String campaignName, String externalId) {
         logger.debug("enroll({})", campaignName);
-        Time now = new Time(DateTime.now().getHourOfDay(), DateTime.now().getMinuteOfHour());
+
+
+        Time now = null;
         LocalDate today = LocalDate.now();
-        CampaignRequest campaignRequest = new CampaignRequest(getNextId(), campaignName, today, now);
+        CampaignRecord campaign = messageCampaignService.getCampaignRecord(campaignName);
+        if (campaign.getCampaignType() != CampaignType.ABSOLUTE) {
+            now = new Time(DateTime.now().getHourOfDay(), DateTime.now().getMinuteOfHour());
+        }
+        CampaignRequest campaignRequest = new CampaignRequest(externalId, campaignName, today, now);
         messageCampaignService.enroll(campaignRequest);
     }
 }

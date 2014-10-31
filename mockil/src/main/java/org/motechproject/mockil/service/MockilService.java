@@ -1,8 +1,8 @@
 package org.motechproject.mockil.service;
 
 public interface MockilService {
-    void create(String campaignName, String delay);
+    void createOffset(String campaignName, String delay);
+    void createAbsolute(String campaignName, String datetime);
     void delete(String campaignName);
-    void enroll(String campaignName);
-    void enrollMany(String campaignName, int number);
+    void enroll(String campaignName, String externalId);
 }
