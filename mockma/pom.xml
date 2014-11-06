@@ -126,6 +126,11 @@
             <version>${motech.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.motechproject</groupId>
+            <artifactId>mtraining</artifactId>
+            <version>0.25-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <repositories>
@@ -159,7 +164,7 @@
                         <Resource-Path>mockma/resources</Resource-Path>
                         <Context-File>META-INF/motech/applicationContext.xml</Context-File>
                         <Context-Path>mockma</Context-Path>
-                        <Export-Package>org.motechproject.mockma.service;version=${project.version},</Export-Package>
+                        <Export-Package>org.motechproject.mockma.service;version=${project.version},org.motechproject.mtraining.domain,</Export-Package>
                         <Import-Package>org.motechproject.osgi.web,
                             *</Import-Package>
                     </instructions>
