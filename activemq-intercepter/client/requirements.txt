@@ -1,0 +1,4 @@
+influxdb==0.1.12
+requests==2.4.3
+stompy==0.2.9
+wsgiref==0.1.2
