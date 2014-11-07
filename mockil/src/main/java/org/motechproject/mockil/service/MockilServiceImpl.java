@@ -9,6 +9,8 @@ import org.motechproject.event.listener.annotations.MotechListener;
 import org.motechproject.messagecampaign.EventKeys;
 import org.motechproject.messagecampaign.contract.CampaignRequest;
 import org.motechproject.messagecampaign.domain.campaign.CampaignType;
+import org.motechproject.messagecampaign.service.CampaignEnrollmentRecord;
+import org.motechproject.messagecampaign.service.CampaignEnrollmentsQuery;
 import org.motechproject.messagecampaign.service.MessageCampaignService;
 import org.motechproject.messagecampaign.userspecified.CampaignMessageRecord;
 import org.motechproject.messagecampaign.userspecified.CampaignRecord;
@@ -18,6 +20,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service("mockilService")
 public class MockilServiceImpl implements MockilService {
@@ -42,17 +47,53 @@ public class MockilServiceImpl implements MockilService {
     }
 
 
+    public Map<String, Integer> getMaxIds() {
+        Integer maxCampaignId = 0;
+        Integer maxExternalId = 0;
+
+        List<CampaignRecord> campaigns  = messageCampaignService.getAllCampaignRecords();
+        for (CampaignRecord campaign : campaigns) {
+            String campaignName = campaign.getName();
+            if (campaignName.matches("C[0-9]*")) {
+                Integer i = Integer.parseInt(campaignName.substring(1));
+                if (i > maxCampaignId) {
+                    maxCampaignId = i;
+                }
+                List<CampaignEnrollmentRecord> enrollments  = messageCampaignService.search(
+                        new CampaignEnrollmentsQuery().withCampaignName(campaignName));
+                for (CampaignEnrollmentRecord enrollment : enrollments) {
+                    String externalId = enrollment.getExternalId();
+                    if (externalId.matches("E[0-9]*")) {
+                        Integer j = Integer.parseInt(externalId.substring(1));
+                        if (j > maxExternalId) {
+                            maxExternalId = j;
+                        }
+                    }
+                }
+            }
+
+        }
+
+        Map<String, Integer> ret = new HashMap<>();
+        ret.put("maxCampaignId", maxCampaignId);
+        ret.put("maxExternalId", maxExternalId);
+        return ret;
+    }
+
+
     private LocalDate extractDate(String datetime) {
         String date = datetime.replaceAll("([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])(.*)",
                 "$1-$3-$5");
         return new LocalDate(date);
     }
 
+
     private String extractTime(String datetime) {
         String time = datetime.replaceAll("([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])(.*)",
                 "$7:$9");
         return time;
     }
+
 
     public void createAbsolute(String campaignName, String datetime) {
         logger.debug("createAbsolute({}, {})", campaignName, datetime);
@@ -77,7 +118,7 @@ public class MockilServiceImpl implements MockilService {
 
     private String decodeDelay(String delay) {
         String s = delay.replaceAll("[^a-zA-Z0-9]", " ");
-        s = s.replaceAll("([0-9])([a-z])", "$2 $1");
+        s = s.replaceAll("([0-9]*)([a-z]*)", "$1 $2");
         return s;
     }
 

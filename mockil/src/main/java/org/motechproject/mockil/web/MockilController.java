@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
+import java.util.Map;
+
 /**
  * Responds to HTTP queries to {motech-server}/module/mockil/enroll and enrolls an expecting mother
  */
@@ -24,18 +26,19 @@ public class MockilController {
     @Autowired
     public MockilController(MockilService mockilService) {
         this.mockilService = mockilService;
-        campaignNum = 0;
-        externalIdNum = 0;
+        Map<String, Integer> maxIds = mockilService.getMaxIds();
+        campaignNum = maxIds.get("maxCampaignId");
+        externalIdNum = maxIds.get("maxExternalId");
     }
 
 
     private synchronized String getNextCampaignName() {
-        return String.format("C%d", campaignNum++);
+        return String.format("C%d", ++campaignNum);
     }
 
 
     private synchronized String getNextExternalId() {
-        return String.format("E%d", externalIdNum++);
+        return String.format("E%d", ++externalIdNum);
     }
 
 
