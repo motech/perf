@@ -2,7 +2,9 @@ package org.motechproject.mockil.service;
 
 import org.joda.time.DateTime;
 import org.joda.time.LocalDate;
+import org.joda.time.Period;
 import org.motechproject.commons.date.model.Time;
+import org.motechproject.commons.date.util.JodaFormatter;
 import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
@@ -24,10 +26,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
 @Service("mockilService")
 public class MockilServiceImpl implements MockilService {
 
     private static final String IVR_INITIATE_CALL = "ivr_initiate_call";
+    private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
+            "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
+    private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
+    private static final String CAMPAIGN_NAME_REGEX = "C[0-9]*";
+    private static final String EXTERNAL_ID_REGEX = "E[0-9]*";
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
     private MessageCampaignService messageCampaignService;
@@ -54,7 +62,7 @@ public class MockilServiceImpl implements MockilService {
         List<CampaignRecord> campaigns  = messageCampaignService.getAllCampaignRecords();
         for (CampaignRecord campaign : campaigns) {
             String campaignName = campaign.getName();
-            if (campaignName.matches("C[0-9]*")) {
+            if (campaignName.matches(CAMPAIGN_NAME_REGEX)) {
                 Integer i = Integer.parseInt(campaignName.substring(1));
                 if (i > maxCampaignId) {
                     maxCampaignId = i;
@@ -63,7 +71,7 @@ public class MockilServiceImpl implements MockilService {
                         new CampaignEnrollmentsQuery().withCampaignName(campaignName));
                 for (CampaignEnrollmentRecord enrollment : enrollments) {
                     String externalId = enrollment.getExternalId();
-                    if (externalId.matches("E[0-9]*")) {
+                    if (externalId.matches(EXTERNAL_ID_REGEX)) {
                         Integer j = Integer.parseInt(externalId.substring(1));
                         if (j > maxExternalId) {
                             maxExternalId = j;
@@ -82,24 +90,41 @@ public class MockilServiceImpl implements MockilService {
 
 
     private LocalDate extractDate(String datetime) {
-        String date = datetime.replaceAll("([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])(.*)",
-                "$1-$3-$5");
+        String date = datetime.replaceAll(DATE_TIME_REGEX, "$1-$3-$5");
         return new LocalDate(date);
     }
 
 
     private String extractTime(String datetime) {
-        String time = datetime.replaceAll("([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])(.*)",
-                "$7:$9");
+        String time = datetime.replaceAll(DATE_TIME_REGEX, "$7:$9");
         return time;
     }
 
 
-    public void createAbsolute(String campaignName, String datetime) {
-        logger.debug("createAbsolute({}, {})", campaignName, datetime);
+    private String fixPeriod(String delay) {
+        String s = delay.replaceAll("[^a-zA-Z0-9]", " ");
+        s = s.replaceAll("([0-9]*)([a-z]*)", "$1 $2");
+        return s;
+    }
 
-        LocalDate date = extractDate(datetime);
-        String time = extractTime(datetime);
+
+    public void createAbsolute(String campaignName, String dateOrPeriod) {
+        logger.debug("createAbsolute({}, {})", campaignName, dateOrPeriod);
+
+        LocalDate date;
+        String time;
+        if (dateOrPeriod.matches(DATE_TIME_REGEX)) {
+            date = extractDate(dateOrPeriod);
+            time = extractTime(dateOrPeriod);
+        } else if (dateOrPeriod.matches(DURATION_REGEX)) {
+            Period period = new JodaFormatter().parsePeriod(fixPeriod(dateOrPeriod));
+            DateTime now = DateTime.now().plus(period.toPeriod());
+            date = now.toLocalDate();
+            time = String.format("%02d:%02d", now.getHourOfDay(), now.getMinuteOfHour());
+        } else {
+            throw new IllegalStateException(String.format("%s seems to be neither a datetime or a duration.",
+                    dateOrPeriod));
+        }
 
         CampaignRecord campaign = new CampaignRecord();
         campaign.setName(campaignName);
@@ -116,17 +141,10 @@ public class MockilServiceImpl implements MockilService {
     }
 
 
-    private String decodeDelay(String delay) {
-        String s = delay.replaceAll("[^a-zA-Z0-9]", " ");
-        s = s.replaceAll("([0-9]*)([a-z]*)", "$1 $2");
-        return s;
-    }
+    public void createOffset(String campaignName, String period) {
+        logger.debug("createOffset({}, {})", campaignName, period);
 
-
-    public void createOffset(String campaignName, String delay) {
-        logger.debug("createOffset({}, {})", campaignName, delay);
-
-        String period = decodeDelay(delay);
+        String fixedupPeriod = fixPeriod(period);
 
         CampaignRecord campaign = new CampaignRecord();
         campaign.setName(campaignName);
@@ -135,12 +153,12 @@ public class MockilServiceImpl implements MockilService {
         CampaignMessageRecord message = new CampaignMessageRecord();
         message.setName("firstMessage");
         message.setStartTime("00:00");
-        message.setTimeOffset(period);
+        message.setTimeOffset(fixedupPeriod);
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
 
-        logger.debug("Successfully created Offset campaign: {}", period);
+        logger.debug("Successfully created Offset campaign: {}", fixedupPeriod);
     }
 
 

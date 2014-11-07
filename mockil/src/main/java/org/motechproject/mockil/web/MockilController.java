@@ -43,9 +43,9 @@ public class MockilController {
 
 
     /*
-     * /create-offset/{delay}
+     * /create-offset/{period}
      *
-     * {delay}: 5minutes
+     * {period}: 5minutes
      *
      * creates an offset campaign
      * returns new campaign name
@@ -53,18 +53,18 @@ public class MockilController {
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-offset/{delay}")
-    public String createOffset(@PathVariable String delay) {
+    @RequestMapping(value = "/create-offset/{period}")
+    public String createOffset(@PathVariable String period) {
         String campaignName = getNextCampaignName();
-        mockilService.createOffset(campaignName, delay);
+        mockilService.createOffset(campaignName, period);
         return campaignName;
     }
 
 
     /*
-     * /create-enroll-offset/{delay}
+     * /create-enroll-offset/{period}
      *
-     * {delay}: 5minutes
+     * {period}: 5minutes
      *
      * creates offset campaign
      * enrolls one enrollment
@@ -73,10 +73,10 @@ public class MockilController {
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-enroll-offset/{delay}")
-    public String createEnrollOffset(@PathVariable String delay) {
+    @RequestMapping(value = "/create-enroll-offset/{period}")
+    public String createEnrollOffset(@PathVariable String period) {
         String campaignName = getNextCampaignName();
-        mockilService.createOffset(campaignName, delay);
+        mockilService.createOffset(campaignName, period);
         String externalId = getNextExternalId();
         mockilService.enroll(campaignName, externalId);
         return String.format("%s, %s", campaignName, externalId);
@@ -84,9 +84,9 @@ public class MockilController {
 
 
     /*
-     * /create-absolute/{datetime}
+     * /create-absolute/{dateOrPeriod}
      *
-     * {datetime}: yyyy-mm-dd-hh-mm
+     * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
      *
      * creates an absolute campaign
      * returns new campaign name
@@ -94,18 +94,18 @@ public class MockilController {
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-absolute/{datetime}")
-    public String createAbsolute(@PathVariable String datetime) {
+    @RequestMapping(value = "/create-absolute/{dateOrPeriod}")
+    public String createAbsolute(@PathVariable String dateOrPeriod) {
         String campaignName = getNextCampaignName();
-        mockilService.createAbsolute(campaignName, datetime);
+        mockilService.createAbsolute(campaignName, dateOrPeriod);
         return campaignName;
     }
 
 
     /*
-     * /create-enroll-absolute/{datetime}
+     * /create-enroll-absolute/{dateOrPeriod}
      *
-     * {datetime}: yyyy-mm-dd-hh-mm
+     * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
      *
      * creates an absolute campaign
      * enrolls one enrollment
@@ -114,10 +114,10 @@ public class MockilController {
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-enroll-absolute/{datetime}")
-    public String createEnrollAbsolute(@PathVariable String datetime) {
+    @RequestMapping(value = "/create-enroll-absolute/{dateOrPeriod}")
+    public String createEnrollAbsolute(@PathVariable String dateOrPeriod) {
         String campaignName = getNextCampaignName();
-        mockilService.createAbsolute(campaignName, datetime);
+        mockilService.createAbsolute(campaignName, dateOrPeriod);
         String externalId = getNextExternalId();
         mockilService.enroll(campaignName, externalId);
         return String.format("%s, %s", campaignName, externalId);
