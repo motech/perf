@@ -31,4 +31,6 @@
 
     <osgi:reference id="eventRelay" interface="org.motechproject.event.listener.EventRelay"/>
 
+    <osgi:reference id="ivrOutboundCallService" interface="org.motechproject.ivr.service.OutboundCallService"/>
+
 </beans>

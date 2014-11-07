@@ -8,6 +8,7 @@ import org.motechproject.commons.date.util.JodaFormatter;
 import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
+import org.motechproject.ivr.service.OutboundCallService;
 import org.motechproject.messagecampaign.EventKeys;
 import org.motechproject.messagecampaign.contract.CampaignRequest;
 import org.motechproject.messagecampaign.domain.campaign.CampaignType;
@@ -16,6 +17,7 @@ import org.motechproject.messagecampaign.service.CampaignEnrollmentsQuery;
 import org.motechproject.messagecampaign.service.MessageCampaignService;
 import org.motechproject.messagecampaign.userspecified.CampaignMessageRecord;
 import org.motechproject.messagecampaign.userspecified.CampaignRecord;
+import org.motechproject.server.config.SettingsFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +32,6 @@ import java.util.Map;
 @Service("mockilService")
 public class MockilServiceImpl implements MockilService {
 
-    private static final String IVR_INITIATE_CALL = "ivr_initiate_call";
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
             "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
@@ -40,18 +41,27 @@ public class MockilServiceImpl implements MockilService {
     private Logger logger = LoggerFactory.getLogger(this.getClass());
     private MessageCampaignService messageCampaignService;
     private EventRelay eventRelay;
+    private OutboundCallService outboundCallService;
 
 
     @Autowired
-    public MockilServiceImpl(EventRelay eventRelay, MessageCampaignService messageCampaignService) {
+    public MockilServiceImpl(EventRelay eventRelay, MessageCampaignService messageCampaignService,
+                             OutboundCallService outboundCallService) {
         this.eventRelay = eventRelay;
         this.messageCampaignService = messageCampaignService;
+        this.outboundCallService = outboundCallService;
     }
 
 
     @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
     public void handleFiredCampaignMessage(MotechEvent event) {
+        String externalId = (String)event.getParameters().get("ExternalID");
         logger.debug("handleFiredCampaignMessage({})", event.toString());
+        logger.debug("Here, the real Kilkari would be looking up the phone number for externalID {}", externalId);
+
+        Map<String, String> params = new HashMap<>();
+        params.put("ExternalID", externalId);
+        outboundCallService.initiateCall("config", params);
     }
 
 
