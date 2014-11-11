@@ -5,7 +5,14 @@
 
     <import resource="classpath*:META-INF/motech/*.xml" />
 
-    <osgi:service ref="helloWorldService"
-        interface="org.motechproject.mockma.service.MockmaService" />
+    <osgi:service ref="mockmaService"
+                  interface="org.motechproject.mockma.service.MockmaService" />
+
+    <osgi:reference id="mtrainingService"
+                    interface="org.motechproject.mtraining.service.MTrainingService" />
+    <osgi:reference id="bookmarkService"
+                    interface="org.motechproject.mtraining.service.BookmarkService" />
+    <osgi:reference id="activityService"
+                    interface="org.motechproject.mtraining.service.ActivityService" />
 
 </beans>

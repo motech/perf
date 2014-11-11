@@ -14,4 +14,7 @@ public interface MockmaService {
 
     /* Set bookmark */
     void setBookmark(Bookmark bookmark);
+
+    /* returns true if the userId does not exist in the system aka. new user */
+    boolean checkNewUser(Long userId);
 }

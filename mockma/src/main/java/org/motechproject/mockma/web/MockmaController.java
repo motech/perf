@@ -39,9 +39,13 @@ public class MockmaController {
     }
 
     @ResponseStatus(HttpStatus.OK)
-    @RequestMapping("updateProgress")
+    @RequestMapping("/updateProgress")
     @ResponseBody
     public void updateProgress(Bookmark bookmark) {
         mockmaService.setBookmark(bookmark);
+    }
+
+    public void checkUser(Long userId) {
+        mockmaService.checkNewUser(userId);
     }
 }
