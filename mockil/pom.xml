@@ -19,6 +19,17 @@
     <dependencies>
         <dependency>
             <groupId>org.motechproject</groupId>
+            <artifactId>motech-platform-dataservices</artifactId>
+            <version>0.25-SNAPSHOT</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.motechproject</groupId>
             <artifactId>ivr</artifactId>
             <version>0.25-SNAPSHOT</version>
         </dependency>

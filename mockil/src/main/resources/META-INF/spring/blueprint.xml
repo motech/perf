@@ -33,4 +33,6 @@
 
     <osgi:reference id="ivrOutboundCallService" interface="org.motechproject.ivr.service.OutboundCallService"/>
 
+    <osgi:reference id="recipientDataService" interface="org.motechproject.mockil.database.RecipientDataService"/>
+
 </beans>

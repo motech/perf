@@ -17,7 +17,8 @@ import org.motechproject.messagecampaign.service.CampaignEnrollmentsQuery;
 import org.motechproject.messagecampaign.service.MessageCampaignService;
 import org.motechproject.messagecampaign.userspecified.CampaignMessageRecord;
 import org.motechproject.messagecampaign.userspecified.CampaignRecord;
-import org.motechproject.server.config.SettingsFacade;
+import org.motechproject.mockil.database.Recipient;
+import org.motechproject.mockil.database.RecipientDataService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,21 +36,23 @@ public class MockilServiceImpl implements MockilService {
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
             "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
-    private static final String CAMPAIGN_NAME_REGEX = "C[0-9]*";
-    private static final String EXTERNAL_ID_REGEX = "E[0-9]*";
+    private static final String CAMPAIGN_NAME_REGEX = "(.*C)([0-9]*)";
+    private static final String EXTERNAL_ID_REGEX = "(.*E)([0-9]*)";
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
     private MessageCampaignService messageCampaignService;
     private EventRelay eventRelay;
     private OutboundCallService outboundCallService;
+    private RecipientDataService recipientDataService;
 
 
     @Autowired
     public MockilServiceImpl(EventRelay eventRelay, MessageCampaignService messageCampaignService,
-                             OutboundCallService outboundCallService) {
+                             OutboundCallService outboundCallService, RecipientDataService recipientDataService) {
         this.eventRelay = eventRelay;
         this.messageCampaignService = messageCampaignService;
         this.outboundCallService = outboundCallService;
+        this.recipientDataService = recipientDataService;
     }
 
 
@@ -57,7 +60,9 @@ public class MockilServiceImpl implements MockilService {
     public void handleFiredCampaignMessage(MotechEvent event) {
         String externalId = (String)event.getParameters().get("ExternalID");
         logger.debug("handleFiredCampaignMessage({})", event.toString());
-        logger.debug("Here, the real Kilkari would be looking up the phone number for externalID {}", externalId);
+
+        Recipient recipient = recipientDataService.findByExternalId(externalId);
+        logger.debug("The phone number for recipient with externalID {} is {}", externalId, recipient.getPhoneNumber());
 
         Map<String, String> params = new HashMap<>();
         params.put("ExternalID", externalId);
@@ -73,7 +78,7 @@ public class MockilServiceImpl implements MockilService {
         for (CampaignRecord campaign : campaigns) {
             String campaignName = campaign.getName();
             if (campaignName.matches(CAMPAIGN_NAME_REGEX)) {
-                Integer i = Integer.parseInt(campaignName.substring(1));
+                Integer i = Integer.parseInt(campaignName.replaceAll(CAMPAIGN_NAME_REGEX, "$2"));
                 if (i > maxCampaignId) {
                     maxCampaignId = i;
                 }
@@ -82,7 +87,7 @@ public class MockilServiceImpl implements MockilService {
                 for (CampaignEnrollmentRecord enrollment : enrollments) {
                     String externalId = enrollment.getExternalId();
                     if (externalId.matches(EXTERNAL_ID_REGEX)) {
-                        Integer j = Integer.parseInt(externalId.substring(1));
+                        Integer j = Integer.parseInt(externalId.replaceAll(EXTERNAL_ID_REGEX, "$2"));
                         if (j > maxExternalId) {
                             maxExternalId = j;
                         }
@@ -179,9 +184,8 @@ public class MockilServiceImpl implements MockilService {
     }
 
 
-    public void enroll(String campaignName, String externalId) {
-        logger.debug("enroll({})", campaignName);
-
+    public void enroll(String campaignName, String externalId, String phoneNumber) {
+        logger.debug(String.format("enroll(%s, %s, %s)", campaignName, externalId, phoneNumber));
 
         Time now = null;
         LocalDate today = LocalDate.now();
@@ -191,5 +195,7 @@ public class MockilServiceImpl implements MockilService {
         }
         CampaignRequest campaignRequest = new CampaignRequest(externalId, campaignName, today, now);
         messageCampaignService.enroll(campaignRequest);
+        Recipient r = recipientDataService.create(new Recipient(externalId, phoneNumber));
+        logger.debug("Created {}", r.toString());
     }
 }
