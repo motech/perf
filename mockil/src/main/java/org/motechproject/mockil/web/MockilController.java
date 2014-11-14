@@ -12,11 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.Map;
-import java.util.Random;
-
 /**
  * Responds to HTTP queries to {motech-server}/module/mockil/enroll and enrolls an expecting mother
  */
@@ -28,7 +23,6 @@ public class MockilController {
     private int externalIdNum;
     private String hostName;
     private Logger logger = LoggerFactory.getLogger(this.getClass());
-    private Random rand = new Random();
 
     private final static long MILLIS_PER_SECOND = 1000;
 
@@ -36,30 +30,6 @@ public class MockilController {
     @Autowired
     public MockilController(MockilService mockilService) {
         this.mockilService = mockilService;
-        Map<String, Integer> maxIds = mockilService.getMaxIds();
-        campaignNum = maxIds.get("maxCampaignId");
-        externalIdNum = maxIds.get("maxExternalId");
-        try {
-            InetAddress ip = InetAddress.getLocalHost();
-            hostName = ip.getHostName();
-        } catch (UnknownHostException e) {
-            throw new RuntimeException("Could not get instance host name: " + e.toString(), e);
-        }
-    }
-
-
-    private synchronized String getNextCampaignName() {
-        return String.format("%s-C%d", hostName, ++campaignNum);
-    }
-
-
-    private synchronized String getNextExternalId() {
-        return String.format("%s-E%d", hostName, ++externalIdNum);
-    }
-
-
-    private String randomPhoneNumber() {
-        return String.format("%03d %03d %04d", rand.nextInt(1000), rand.nextInt(1000), rand.nextInt(10000));
     }
 
 
@@ -76,9 +46,7 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/create-offset/{period}")
     public String createOffset(@PathVariable String period) {
-        String campaignName = getNextCampaignName();
-        mockilService.createOffset(campaignName, period);
-        return campaignName;
+        return mockilService.createOffset(period);
     }
 
 
@@ -96,11 +64,28 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/create-enroll-offset/{period}")
     public String createEnrollOffset(@PathVariable String period) {
-        String campaignName = getNextCampaignName();
-        mockilService.createOffset(campaignName, period);
-        String externalId = getNextExternalId();
-        mockilService.enroll(campaignName, externalId, randomPhoneNumber());
-        return String.format("%s, %s", campaignName, externalId);
+        String campaignName = mockilService.createOffset(period);
+        return mockilService.enroll(campaignName);
+    }
+
+
+    /*
+     * /create-enroll-many-offset/{period}/{number}
+     *
+     * {period}: 5minutes
+     * {number}: integer, number of enrollments
+     *
+     * creates offset campaign
+     * enrolls {numbers} enrollment(s)
+     * returns list of new enrollment external id(s)
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/create-enroll-many-offset/{period}")
+    public String createEnrollManyOffset(@PathVariable String period, @PathVariable int number) {
+        String campaignName = mockilService.createOffset(period);
+        return doEnrollMany(campaignName, number);
     }
 
 
@@ -117,9 +102,7 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/create-absolute/{dateOrPeriod}")
     public String createAbsolute(@PathVariable String dateOrPeriod) {
-        String campaignName = getNextCampaignName();
-        mockilService.createAbsolute(campaignName, dateOrPeriod);
-        return campaignName;
+        return mockilService.createAbsolute(dateOrPeriod);
     }
 
 
@@ -137,11 +120,28 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/create-enroll-absolute/{dateOrPeriod}")
     public String createEnrollAbsolute(@PathVariable String dateOrPeriod) {
-        String campaignName = getNextCampaignName();
-        mockilService.createAbsolute(campaignName, dateOrPeriod);
-        String externalId = getNextExternalId();
-        mockilService.enroll(campaignName, externalId, randomPhoneNumber());
-        return String.format("%s, %s", campaignName, externalId);
+        String campaignName = mockilService.createAbsolute(dateOrPeriod);
+        return mockilService.enroll(campaignName);
+    }
+
+
+    /*
+     * /create-enroll-many-absolute/{dateOrPeriod}/{number}
+     *
+     * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
+     * {number}: integer, number of enrollments
+     *
+     * creates offset campaign
+     * enrolls {numbers} enrollment(s)
+     * returns list of new enrollment external id(s)
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/create-enroll-many-absolute/{dateOrPeriod}/{number}")
+    public String createEnrollManyAbsolute(@PathVariable String dateOrPeriod, @PathVariable int number) {
+        String campaignName = mockilService.createAbsolute(dateOrPeriod);
+        return doEnrollMany(campaignName, number);
     }
 
 
@@ -158,8 +158,7 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/delete/{campaignName}")
     public String delete(@PathVariable String campaignName) {
-        mockilService.delete(campaignName);
-        return String.format("DELETED %s", campaignName);
+        return mockilService.delete(campaignName);
     }
 
 
@@ -176,9 +175,30 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/enroll/{campaignName}")
     public String enroll(@PathVariable String campaignName) {
-        String externalId = getNextExternalId();
-        mockilService.enroll(campaignName, externalId, randomPhoneNumber());
-        return externalId;
+        return mockilService.enroll(campaignName);
+    }
+
+
+    private String doEnrollMany(String campaignName, int number) {
+        long start = System.currentTimeMillis();
+        StringBuilder ids = new StringBuilder("");
+        if (number > 0) {
+            ids.append(mockilService.enroll(campaignName));
+
+            for (int i = 1; i < number; i++) {
+                ids.append(",");
+                ids.append(mockilService.enroll(campaignName));
+            }
+        }
+
+        if (logger.isDebugEnabled()) {
+            long millis = System.currentTimeMillis() - start;
+            float rate = (float) number * MILLIS_PER_SECOND / millis;
+            String plural = rate == 1 ? "" : "s";
+            logger.debug("{} enrollment{} / second", rate, plural);
+        }
+
+        return ids.toString();
     }
 
 
@@ -196,24 +216,24 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/enroll/{campaignName}/{number}")
     public String enrollMany(@PathVariable String campaignName, @PathVariable int number) {
-        String ids = "";
-        String sep = "";
-        long start = System.currentTimeMillis();
-        for (int i=0 ; i<number ; i++) {
-            String externalId = getNextExternalId();
-            mockilService.enroll(campaignName, externalId, randomPhoneNumber());
-            ids += sep + externalId;
-            if (sep.isEmpty()) {
-                sep = ", ";
-            }
-        }
-        if (logger.isDebugEnabled()) {
-            long millis = System.currentTimeMillis() - start;
-            float rate = (float) number * MILLIS_PER_SECOND / millis;
-            String plural = rate == 1 ? "" : "s";
-            logger.debug("{} enrollment{} / second", rate, plural);
-        }
-        return ids;
+        return doEnrollMany(campaignName, number);
+    }
+
+
+    /*
+     * /call/{externalId}
+     *
+     * {externalId}: uniquely identifies who to call
+     *
+     * initiates outbound call
+     * returns externalId
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/call/{externalId}")
+    public String call(@PathVariable String externalId) {
+        return mockilService.makeOutboundCall(externalId);
     }
 
 

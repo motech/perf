@@ -24,10 +24,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 
 @Service("mockilService")
@@ -36,14 +40,19 @@ public class MockilServiceImpl implements MockilService {
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
             "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
-    private static final String CAMPAIGN_NAME_REGEX = "(.*C)([0-9]*)";
-    private static final String EXTERNAL_ID_REGEX = "(.*E)([0-9]*)";
-
+    private String campaignNameRegex;
+    private String externalIdRegex;
     private Logger logger = LoggerFactory.getLogger(this.getClass());
     private MessageCampaignService messageCampaignService;
     private EventRelay eventRelay;
     private OutboundCallService outboundCallService;
     private RecipientDataService recipientDataService;
+    private String hostName;
+    private List<String> campaignList;
+    private List<String> externalIdList;
+    private List<String> phoneNumberList; //indexed the same way externalIdList is
+    private Random rand;
+
 
 
     @Autowired
@@ -53,32 +62,43 @@ public class MockilServiceImpl implements MockilService {
         this.messageCampaignService = messageCampaignService;
         this.outboundCallService = outboundCallService;
         this.recipientDataService = recipientDataService;
+        setupData();
     }
 
 
-    @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
-    public void handleFiredCampaignMessage(MotechEvent event) {
-        String externalId = (String)event.getParameters().get("ExternalID");
-        logger.debug("handleFiredCampaignMessage({})", event.toString());
-
-        Recipient recipient = recipientDataService.findByExternalId(externalId);
-        logger.debug("The phone number for recipient with externalID {} is {}", externalId, recipient.getPhoneNumber());
-
-        Map<String, String> params = new HashMap<>();
-        params.put("ExternalID", externalId);
-        outboundCallService.initiateCall("config", params);
+    private String campaignName(int id) {
+        return String.format("%s-C%d", hostName, id);
     }
 
 
-    public Map<String, Integer> getMaxIds() {
+    private String externalId(int id) {
+        return String.format("%s-E%d", hostName, id);
+    }
+
+
+    private void setupData() {
         Integer maxCampaignId = 0;
         Integer maxExternalId = 0;
+        campaignList = new ArrayList<>();
+        externalIdList = new ArrayList<>();
+        phoneNumberList = new ArrayList<>();
+        rand = new Random();
+
+        try {
+            InetAddress ip = InetAddress.getLocalHost();
+            hostName = ip.getHostName();
+        } catch (UnknownHostException e) {
+            throw new RuntimeException("Could not get instance host name: " + e.toString(), e);
+        }
+        campaignNameRegex = String.format("(%s-C)([0-9]*)", hostName);
+        externalIdRegex = String.format("(%s-E)([0-9]*)", hostName);
 
         List<CampaignRecord> campaigns  = messageCampaignService.getAllCampaignRecords();
         for (CampaignRecord campaign : campaigns) {
             String campaignName = campaign.getName();
-            if (campaignName.matches(CAMPAIGN_NAME_REGEX)) {
-                Integer i = Integer.parseInt(campaignName.replaceAll(CAMPAIGN_NAME_REGEX, "$2"));
+            if (campaignName.matches(campaignNameRegex)) {
+                Integer i = Integer.parseInt(campaignName.replaceAll(campaignNameRegex, "$2"));
+                campaignList.add(i, campaignName(i));
                 if (i > maxCampaignId) {
                     maxCampaignId = i;
                 }
@@ -86,21 +106,59 @@ public class MockilServiceImpl implements MockilService {
                         new CampaignEnrollmentsQuery().withCampaignName(campaignName));
                 for (CampaignEnrollmentRecord enrollment : enrollments) {
                     String externalId = enrollment.getExternalId();
-                    if (externalId.matches(EXTERNAL_ID_REGEX)) {
-                        Integer j = Integer.parseInt(externalId.replaceAll(EXTERNAL_ID_REGEX, "$2"));
-                        if (j > maxExternalId) {
-                            maxExternalId = j;
-                        }
+                    Recipient recipient = recipientDataService.findByExternalId(externalId);
+                    Integer j = Integer.parseInt(externalId.replaceAll(externalIdRegex, "$2"));
+                    externalIdList.add(j, externalId(j));
+                    phoneNumberList.add(j, recipient.getPhoneNumber());
+                    if (j > maxExternalId) {
+                        maxExternalId = j;
                     }
                 }
             }
-
         }
+    }
 
-        Map<String, Integer> ret = new HashMap<>();
-        ret.put("maxCampaignId", maxCampaignId);
-        ret.put("maxExternalId", maxExternalId);
-        return ret;
+
+    private String randomPhoneNumber() {
+        return String.format("%03d %03d %04d", rand.nextInt(1000), rand.nextInt(1000), rand.nextInt(10000));
+    }
+
+
+    private synchronized int createRecipient() {
+        int id = externalIdList.size();
+        externalIdList.add(id, externalId(id));
+        phoneNumberList.add(id, randomPhoneNumber());
+        return id;
+    }
+
+
+    private synchronized int createCampaign() {
+        int id = campaignList.size();
+        campaignList.add(id, campaignName(id));
+        return id;
+    }
+
+
+    @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
+    public void handleFiredCampaignMessage(MotechEvent event) {
+        String externalId = (String)event.getParameters().get("ExternalID");
+        logger.debug("handleFiredCampaignMessage({})", event.toString());
+        makeOutboundCall(externalId);
+    }
+
+
+    public String makeOutboundCall(String externalId) {
+        logger.debug("makeOutboundCall({})", externalId);
+
+        Recipient recipient = recipientDataService.findByExternalId(externalId);
+        logger.debug("The phone number for recipient with externalID {} is {}", externalId, recipient.getPhoneNumber());
+
+        Map<String, String> params = new HashMap<>();
+        params.put("ExternalID", externalId);
+        params.put("to", recipient.getPhoneNumber().replaceAll("[^0-9]", ""));
+        outboundCallService.initiateCall("config", params);
+
+        return externalId;
     }
 
 
@@ -123,9 +181,7 @@ public class MockilServiceImpl implements MockilService {
     }
 
 
-    public void createAbsolute(String campaignName, String dateOrPeriod) {
-        logger.debug("createAbsolute({}, {})", campaignName, dateOrPeriod);
-
+    public String createAbsolute(String dateOrPeriod) {
         LocalDate date;
         String time;
         if (dateOrPeriod.matches(DATE_TIME_REGEX)) {
@@ -142,6 +198,8 @@ public class MockilServiceImpl implements MockilService {
         }
 
         CampaignRecord campaign = new CampaignRecord();
+        int id = createCampaign();
+        String campaignName = campaignList.get(id);
         campaign.setName(campaignName);
         campaign.setCampaignType(CampaignType.ABSOLUTE);
 
@@ -152,16 +210,19 @@ public class MockilServiceImpl implements MockilService {
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
-        logger.debug("Successfully created Absolute campaign on {} at {}", date.toString(), time);
+        logger.debug(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
+
+        return campaignName;
     }
 
 
-    public void createOffset(String campaignName, String period) {
-        logger.debug("createOffset({}, {})", campaignName, period);
+    public String createOffset(String period) {
 
         String fixedupPeriod = fixPeriod(period);
 
         CampaignRecord campaign = new CampaignRecord();
+        int id = createCampaign();
+        String campaignName = campaignList.get(id);
         campaign.setName(campaignName);
         campaign.setCampaignType(CampaignType.OFFSET);
 
@@ -173,19 +234,22 @@ public class MockilServiceImpl implements MockilService {
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
 
-        logger.debug("Successfully created Offset campaign: {}", fixedupPeriod);
+        logger.debug("Offset campaign {}: {}", campaignName, fixedupPeriod);
+
+        return campaignName;
     }
 
 
-    public void delete(String campaignName) {
+    public String delete(String campaignName) {
         logger.debug("delete({})", campaignName);
 
         messageCampaignService.deleteCampaign(campaignName);
+
+        return campaignName;
     }
 
 
-    public void enroll(String campaignName, String externalId, String phoneNumber) {
-        logger.debug(String.format("enroll(%s, %s, %s)", campaignName, externalId, phoneNumber));
+    public String enroll(String campaignName) {
 
         Time now = null;
         LocalDate today = LocalDate.now();
@@ -193,9 +257,14 @@ public class MockilServiceImpl implements MockilService {
         if (campaign.getCampaignType() != CampaignType.ABSOLUTE) {
             now = new Time(DateTime.now().getHourOfDay(), DateTime.now().getMinuteOfHour());
         }
+        int id = createRecipient();
+        String externalId = externalIdList.get(id);
+        String phoneNumber = phoneNumberList.get(id);
         CampaignRequest campaignRequest = new CampaignRequest(externalId, campaignName, today, now);
         messageCampaignService.enroll(campaignRequest);
         Recipient r = recipientDataService.create(new Recipient(externalId, phoneNumber));
-        logger.debug("Created {}", r.toString());
+        logger.debug("Enrollment externalId {}: {}", externalId, phoneNumber);
+
+        return externalId;
     }
 }

@@ -70,6 +70,9 @@
                         <Import-Package>
                             *
                         </Import-Package>
+                        <Export-Package>
+                            org.motechproject.mockil.database;version=0.1.0,
+                        </Export-Package>
                     </instructions>
                 </configuration>
             </plugin>

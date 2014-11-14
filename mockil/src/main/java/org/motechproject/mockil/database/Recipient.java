@@ -67,7 +67,7 @@ public class Recipient {
 
     @Override
     public String toString() {
-        return "PregnantWoman{" +
+        return "Recipient{" +
                 "externalId='" + externalId + '\'' +
                 ", phoneNumber='" + phoneNumber + '\'' +
                 '}';
