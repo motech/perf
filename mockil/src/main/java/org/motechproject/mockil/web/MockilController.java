@@ -180,6 +180,7 @@ public class MockilController {
 
 
     private String doEnrollMany(String campaignName, int number) {
+        mockilService.expect(number);
         long start = System.currentTimeMillis();
         StringBuilder ids = new StringBuilder("");
         if (number > 0) {
@@ -195,7 +196,7 @@ public class MockilController {
             long millis = System.currentTimeMillis() - start;
             float rate = (float) number * MILLIS_PER_SECOND / millis;
             String plural = rate == 1 ? "" : "s";
-            logger.debug("{} enrollment{} / second", rate, plural);
+            logger.info("{} enrollment{} / second", rate, plural);
         }
 
         return ids.toString();
@@ -221,19 +222,79 @@ public class MockilController {
 
 
     /*
-     * /call/{externalId}
+     * /call
      *
-     * {externalId}: uniquely identifies who to call
-     *
-     * initiates outbound call
+     * initiates outbound call to random number
      * returns externalId
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/call/{externalId}")
-    public String call(@PathVariable String externalId) {
-        return mockilService.makeOutboundCall(externalId);
+    @RequestMapping(value = "/call")
+    public String call() {
+        return mockilService.makeOutboundCall();
+    }
+
+
+    /*
+     * /expect/{number}
+     *
+     * {number}: integer, number of expected calls
+     *
+     * sets call expectations for {number} calls
+     * returns {number}
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/expect/{number}")
+    public String expect(@PathVariable int number) {
+        return mockilService.expect(number);
+    }
+
+
+    /*
+     * /send-motech-event
+     *
+     * sends a random motech 'outbound-call' event
+     * returns externalId
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/send-motech-event")
+    public String sendMotechEvent() {
+        return mockilService.sendMotechEvent();
+    }
+
+
+    /*
+     * /do-call
+     *
+     * will make calls
+     * returns 'will call'
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/do-call")
+    public String doCall() {
+        return mockilService.doCall();
+    }
+
+
+    /*
+     * /dont-call
+     *
+     * will not make calls
+     * returns 'won't call'
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/dont-call")
+    public String dontCall() {
+        return mockilService.dontCall();
     }
 
 

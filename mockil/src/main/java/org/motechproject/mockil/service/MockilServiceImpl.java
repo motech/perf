@@ -37,6 +37,7 @@ import java.util.Random;
 @Service("mockilService")
 public class MockilServiceImpl implements MockilService {
 
+    private final static long MILLIS_PER_SECOND = 1000;
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
             "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
@@ -52,7 +53,11 @@ public class MockilServiceImpl implements MockilService {
     private List<String> externalIdList;
     private List<String> phoneNumberList; //indexed the same way externalIdList is
     private Random rand;
-
+    private boolean expecting = false;
+    private int expected = 0;
+    private int stillExpecting = 0;
+    private long expectingStart = 0;
+    private boolean dontCall = false;
 
 
     @Autowired
@@ -116,6 +121,8 @@ public class MockilServiceImpl implements MockilService {
                 }
             }
         }
+
+        logger.info("Read {} campaigns & {} enrollments from the database", campaignList.size(), externalIdList.size());
     }
 
 
@@ -143,12 +150,28 @@ public class MockilServiceImpl implements MockilService {
     public void handleFiredCampaignMessage(MotechEvent event) {
         String externalId = (String)event.getParameters().get("ExternalID");
         logger.debug("handleFiredCampaignMessage({})", event.toString());
-        makeOutboundCall(externalId);
+        call(externalId);
+        meetExpectation();
     }
 
 
-    public String makeOutboundCall(String externalId) {
-        logger.debug("makeOutboundCall({})", externalId);
+    public String sendMotechEvent() {
+        logger.debug("sendMotechEvent()");
+        Map<String, Object> eventParams = new HashMap<>();
+        String externalId = externalIdList.get(rand.nextInt(externalIdList.size()));
+        eventParams.put("ExternalID", externalId);
+        MotechEvent event = new MotechEvent(EventKeys.SEND_MESSAGE, eventParams);
+        eventRelay.sendEventMessage(event);
+        return externalId;
+    }
+
+
+    private String call(String externalId) {
+        logger.debug("call({})", externalId);
+
+        if (dontCall) {
+            return externalId;
+        }
 
         Recipient recipient = recipientDataService.findByExternalId(externalId);
         logger.debug("The phone number for recipient with externalID {} is {}", externalId, recipient.getPhoneNumber());
@@ -158,6 +181,16 @@ public class MockilServiceImpl implements MockilService {
         params.put("to", recipient.getPhoneNumber().replaceAll("[^0-9]", ""));
         outboundCallService.initiateCall("config", params);
 
+        return externalId;
+    }
+
+
+    public String makeOutboundCall() {
+        logger.debug("makeOutboundCall()");
+
+        String externalId = externalIdList.get(rand.nextInt(externalIdList.size()));
+        call(externalId);
+        meetExpectation();
         return externalId;
     }
 
@@ -234,7 +267,7 @@ public class MockilServiceImpl implements MockilService {
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
 
-        logger.debug("Offset campaign {}: {}", campaignName, fixedupPeriod);
+        logger.debug("{}: {}", campaignName, fixedupPeriod);
 
         return campaignName;
     }
@@ -260,11 +293,50 @@ public class MockilServiceImpl implements MockilService {
         int id = createRecipient();
         String externalId = externalIdList.get(id);
         String phoneNumber = phoneNumberList.get(id);
+        recipientDataService.create(new Recipient(externalId, phoneNumber));
         CampaignRequest campaignRequest = new CampaignRequest(externalId, campaignName, today, now);
         messageCampaignService.enroll(campaignRequest);
-        Recipient r = recipientDataService.create(new Recipient(externalId, phoneNumber));
-        logger.debug("Enrollment externalId {}: {}", externalId, phoneNumber);
+        logger.debug("{}: {}", externalId, phoneNumber);
 
         return externalId;
+    }
+
+
+    private synchronized void meetExpectation() {
+        if (expecting) {
+            if (stillExpecting == expected) {
+                // we've met the first expectation, start timer
+                logger.info("First of {} expected calls, starting timer.", expected);
+                expectingStart = System.currentTimeMillis();
+            }
+            stillExpecting--;
+            if (stillExpecting == 0) {
+                long millis = System.currentTimeMillis() - expectingStart;
+                float rate = (float) expected * MILLIS_PER_SECOND / millis;
+                logger.info("Measured {} calls at {} calls/second", expected, rate);
+                expecting = false;
+            }
+        }
+    }
+
+
+    public String expect(int number) {
+        expecting = true;
+        stillExpecting = number;
+        expected = number;
+        logger.info("Setting expectations for {} calls", number);
+        return String.format("%d", number);
+    }
+
+
+    public String doCall() {
+        dontCall = false;
+        return "will call";
+    }
+
+
+    public String dontCall() {
+        dontCall = true;
+        return "won't call";
     }
 }
