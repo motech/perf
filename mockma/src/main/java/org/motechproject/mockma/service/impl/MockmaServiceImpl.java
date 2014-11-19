@@ -2,10 +2,11 @@ package org.motechproject.mockma.service.impl;
 
 import org.motechproject.mockma.service.MockmaService;
 import org.motechproject.mtraining.domain.Bookmark;
-import org.motechproject.mtraining.domain.Course;
 import org.motechproject.mtraining.service.ActivityService;
 import org.motechproject.mtraining.service.BookmarkService;
 import org.motechproject.mtraining.service.MTrainingService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ public class MockmaServiceImpl implements MockmaService {
     private MTrainingService mTrainingService;
     private BookmarkService bookmarkService;
     private ActivityService activityService;
+    private Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     public MockmaServiceImpl(MTrainingService mTrainingService, BookmarkService bookmarkService, ActivityService activityService) {
@@ -28,6 +30,7 @@ public class MockmaServiceImpl implements MockmaService {
 
     @Override
     public String sayHello() {
+        logger.info("They said hello and I said world?");
         return "Hello World";
     }
 
@@ -35,7 +38,7 @@ public class MockmaServiceImpl implements MockmaService {
     public String getNextUnit(Long userId) {
 
         Bookmark latest = this.bookmarkService.getLatestBookmarkByUserId(userId.toString());
-        return mTrainingService.getCourseById(Long.parseLong(latest.getCourseIdentifier())).toString();
+        return latest != null ? mTrainingService.getCourseById(Long.parseLong(latest.getCourseIdentifier())).toString() : null;
     }
 
     @Override
