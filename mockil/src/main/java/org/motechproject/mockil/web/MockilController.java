@@ -273,17 +273,61 @@ public class MockilController {
 
 
     /*
-     * /send-motech-event
+     * /send-campaign-event
      *
-     * sends a random motech 'outbound-call' event
+     * sends a fired campaign message event with random external id
      * returns externalId
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/send-motech-event")
-    public String sendMotechEvent() {
-        return mockilService.sendMotechEvent();
+    @RequestMapping(value = "/send-campaign-event")
+    public String sendCampaignEvent() {
+        return mockilService.sendCampaignEvent();
+    }
+
+
+    /*
+     * /send-test-event
+     *
+     * sends a test event
+     * returns OK
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/send-test-event")
+    public String sendTestEvent() {
+        return mockilService.sendTestEvent();
+    }
+
+
+    /*
+     * /send-many-test-events/{number}
+     *
+     * sends a test event
+     * returns OK
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/send-many-test-events/{number}")
+    public String sendManyTestEvents(@PathVariable int number) {
+        mockilService.expect(number);
+        long start = System.currentTimeMillis();
+
+        for (int i=0 ; i < number; i++) {
+            mockilService.sendTestEvent();
+        }
+
+        if (logger.isDebugEnabled()) {
+            long millis = System.currentTimeMillis() - start;
+            float rate = (float) number * MILLIS_PER_SECOND / millis;
+            String plural = rate == 1 ? "" : "s";
+            logger.info("{} enrollment{} / second", rate, plural);
+        }
+
+        return String.format("%d", number);
     }
 
 

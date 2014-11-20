@@ -41,6 +41,7 @@ public class MockilServiceImpl implements MockilService {
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
             "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
+    private static final String TEST_EVENT = "org.motechproject.mockil.test";
     private String campaignNameRegex;
     private String externalIdRegex;
     private Logger logger = LoggerFactory.getLogger(MockilServiceImpl.class);
@@ -155,14 +156,30 @@ public class MockilServiceImpl implements MockilService {
     }
 
 
-    public String sendMotechEvent() {
-        logger.debug("sendMotechEvent()");
+    @MotechListener(subjects = { TEST_EVENT })
+    public void handleTestEvent(MotechEvent event) {
+        logger.debug("handleTestEvent()");
+        meetExpectation();
+    }
+
+
+    public String sendCampaignEvent() {
+        logger.debug("sendCampaignEvent()");
         Map<String, Object> eventParams = new HashMap<>();
         String externalId = externalIdList.get(rand.nextInt(externalIdList.size()));
         eventParams.put("ExternalID", externalId);
         MotechEvent event = new MotechEvent(EventKeys.SEND_MESSAGE, eventParams);
         eventRelay.sendEventMessage(event);
         return externalId;
+    }
+
+
+    public String sendTestEvent() {
+        logger.debug("sendTestEvent()");
+        Map<String, Object> eventParams = new HashMap<>();
+        MotechEvent event = new MotechEvent(TEST_EVENT, eventParams);
+        eventRelay.sendEventMessage(event);
+        return "OK";
     }
 
 
@@ -317,6 +334,7 @@ public class MockilServiceImpl implements MockilService {
                 float rate = (float) expected * MILLIS_PER_SECOND / millis;
                 logger.info("Measured {} calls at {} calls/second", expected, rate);
                 expecting = false;
+                expected = 0;
             }
         }
     }
@@ -326,7 +344,11 @@ public class MockilServiceImpl implements MockilService {
         expecting = true;
         stillExpecting += number;
         expected += number;
-        logger.info("Expectations set to {} calls, still expecting {} calls", expected, stillExpecting);
+        String info = String.format("Expectations set to %d calls", expected);
+        if (expected > number) {
+            info += String.format(", expecting %d in total", stillExpecting);
+        }
+        logger.info(info);
         return String.format("%d", expected);
     }
 
