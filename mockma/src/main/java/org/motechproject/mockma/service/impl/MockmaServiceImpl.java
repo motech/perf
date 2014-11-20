@@ -35,10 +35,14 @@ public class MockmaServiceImpl implements MockmaService {
     }
 
     @Override
-    public String getNextUnit(Long userId) {
+    public String getNextUnit(String userId) {
 
-        Bookmark latest = this.bookmarkService.getLatestBookmarkByUserId(userId.toString());
-        return latest != null ? mTrainingService.getCourseById(Long.parseLong(latest.getCourseIdentifier())).toString() : null;
+        Bookmark latest = this.bookmarkService.getLatestBookmarkByUserId(userId);
+        if (latest != null) {
+            return mTrainingService.getCourseById(Long.parseLong(latest.getCourseIdentifier())).toString();
+        } else {
+            return null;
+        }
     }
 
     @Override
@@ -48,10 +52,10 @@ public class MockmaServiceImpl implements MockmaService {
     }
 
     @Override
-    public boolean checkNewUser(Long userId) {
-
-        return this.activityService.getAllActivityForUser(userId.toString()).isEmpty() &&
-                this.bookmarkService.getAllBookmarksForUser(userId.toString()).isEmpty();
+    public boolean checkNewUser(String userId) {
+        logger.info(String.format("You asked me to check for userId: %s", userId));
+        return this.activityService.getAllActivityForUser(userId).isEmpty() &&
+                this.bookmarkService.getAllBookmarksForUser(userId).isEmpty();
     }
 
 }

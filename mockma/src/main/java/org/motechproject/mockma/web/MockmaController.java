@@ -34,7 +34,7 @@ public class MockmaController {
 
     @RequestMapping("/getNextUnit")
     @ResponseBody
-    public String getNextUnit(Long userId) {
+    public String getNextUnit(String userId) {
         return mockmaService.getNextUnit(userId);
     }
 
@@ -45,7 +45,10 @@ public class MockmaController {
         mockmaService.setBookmark(bookmark);
     }
 
-    public void checkUser(Long userId) {
-        mockmaService.checkNewUser(userId);
+    @RequestMapping("/checkUser")
+    @ResponseBody
+    public Boolean checkUser(String userId) {
+
+        return mockmaService.checkNewUser(userId);
     }
 }
