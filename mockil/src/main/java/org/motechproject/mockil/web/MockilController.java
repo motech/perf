@@ -182,13 +182,16 @@ public class MockilController {
     private String doEnrollMany(String campaignName, int number) {
         mockilService.expect(number);
         long start = System.currentTimeMillis();
-        StringBuilder ids = new StringBuilder("");
-        if (number > 0) {
-            ids.append(mockilService.enroll(campaignName));
+        String ret = "";
 
-            for (int i = 1; i < number; i++) {
-                ids.append(",");
-                ids.append(mockilService.enroll(campaignName));
+        if (number > 0) {
+            ret += mockilService.enroll(campaignName);
+            int i = 1;
+            for (; i < number - 1; i++) {
+                mockilService.enroll(campaignName);
+            }
+            if (i < number) {
+                ret += "-" + mockilService.enroll(campaignName);
             }
         }
 
@@ -199,7 +202,7 @@ public class MockilController {
             logger.info("{} enrollment{} / second", rate, plural);
         }
 
-        return ids.toString();
+        return ret;
     }
 
 
@@ -250,6 +253,22 @@ public class MockilController {
     @RequestMapping(value = "/expect/{number}")
     public String expect(@PathVariable int number) {
         return mockilService.expect(number);
+    }
+
+
+    /*
+     * /reset-expectations
+     *
+     *
+     * sets call expectations to zero
+     * returns OK
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/reset-expectations")
+    public String expect() {
+        return mockilService.resetExpectations();
     }
 
 

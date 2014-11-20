@@ -8,6 +8,7 @@ public interface MockilService {
     String enroll(String campaignName);
     String sendMotechEvent();
     String expect(int number);
+    String resetExpectations();
     String doCall();
     String dontCall();
 }

@@ -43,7 +43,7 @@ public class MockilServiceImpl implements MockilService {
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
     private String campaignNameRegex;
     private String externalIdRegex;
-    private Logger logger = LoggerFactory.getLogger(this.getClass());
+    private Logger logger = LoggerFactory.getLogger(MockilServiceImpl.class);
     private MessageCampaignService messageCampaignService;
     private EventRelay eventRelay;
     private OutboundCallService outboundCallService;
@@ -243,7 +243,7 @@ public class MockilServiceImpl implements MockilService {
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
-        logger.debug(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
+        logger.info(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
 
         return campaignName;
     }
@@ -266,8 +266,7 @@ public class MockilServiceImpl implements MockilService {
 
         campaign.setMessages(Arrays.asList(message));
         messageCampaignService.saveCampaign(campaign);
-
-        logger.debug("{}: {}", campaignName, fixedupPeriod);
+        logger.info("Offset campaign: {}: {}", campaignName, fixedupPeriod);
 
         return campaignName;
     }
@@ -297,6 +296,9 @@ public class MockilServiceImpl implements MockilService {
         CampaignRequest campaignRequest = new CampaignRequest(externalId, campaignName, today, now);
         messageCampaignService.enroll(campaignRequest);
         logger.debug("{}: {}", externalId, phoneNumber);
+        if (id % 1000 == 0) {
+            logger.info("Enroll id {}", id);
+        }
 
         return externalId;
     }
@@ -322,10 +324,19 @@ public class MockilServiceImpl implements MockilService {
 
     public String expect(int number) {
         expecting = true;
-        stillExpecting = number;
-        expected = number;
-        logger.info("Setting expectations for {} calls", number);
-        return String.format("%d", number);
+        stillExpecting += number;
+        expected += number;
+        logger.info("Expectations set to {} calls, still expecting {} calls", expected, stillExpecting);
+        return String.format("%d", expected);
+    }
+
+
+    public String resetExpectations() {
+        expecting = false;
+        stillExpecting  = 0;
+        expected = 0;
+        logger.info("Reset expectations");
+        return "OK";
     }
 
 
