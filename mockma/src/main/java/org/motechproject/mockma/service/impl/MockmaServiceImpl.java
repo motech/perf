@@ -2,6 +2,8 @@ package org.motechproject.mockma.service.impl;
 
 import org.motechproject.mockma.service.MockmaService;
 import org.motechproject.mtraining.domain.Bookmark;
+import org.motechproject.mtraining.domain.Course;
+import org.motechproject.mtraining.domain.CourseUnitState;
 import org.motechproject.mtraining.service.ActivityService;
 import org.motechproject.mtraining.service.BookmarkService;
 import org.motechproject.mtraining.service.MTrainingService;
@@ -9,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * Simple implementation of the {@link org.motechproject.mockma.service.MockmaService} interface.
@@ -56,6 +60,19 @@ public class MockmaServiceImpl implements MockmaService {
         logger.info(String.format("You asked me to check for userId: %s", userId));
         return this.activityService.getAllActivityForUser(userId).isEmpty() &&
                 this.bookmarkService.getAllBookmarksForUser(userId).isEmpty();
+    }
+
+    @Override
+    public String GetCourseString(String courseName) {
+        logger.info(String.format("asked for course with name: %s", courseName));
+        String courseString = "";
+        List<Course> courses = mTrainingService.getCourseByName("courseName");
+        for (Course current : courses) {
+            if (current.getState() == CourseUnitState.Active) {
+                return current.toString();
+            }
+        }
+        return "";
     }
 
 }
