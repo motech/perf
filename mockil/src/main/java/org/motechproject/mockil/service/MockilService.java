@@ -6,7 +6,8 @@ public interface MockilService {
     String createAbsolute(String dateOrPeriod);
     String delete(String campaignName);
     String enroll(String campaignName);
-    String sendMotechEvent();
+    String sendCampaignEvent();
+    String sendTestEvent();
     String expect(int number);
     String resetExpectations();
     String doCall();
