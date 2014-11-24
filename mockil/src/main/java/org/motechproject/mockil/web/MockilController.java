@@ -11,6 +11,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+
+import java.util.Map;
 
 /**
  * Responds to HTTP queries to {motech-server}/module/mockil/enroll and enrolls an expecting mother
@@ -23,14 +28,35 @@ public class MockilController {
     private int externalIdNum;
     private String hostName;
     private Logger logger = LoggerFactory.getLogger(this.getClass());
+    private final RequestMappingHandlerMapping handlerMapping;
 
     private final static long MILLIS_PER_SECOND = 1000;
 
 
     @Autowired
-    public MockilController(MockilService mockilService) {
+    public MockilController(MockilService mockilService, RequestMappingHandlerMapping handlerMapping) {
         this.mockilService = mockilService;
+        this.handlerMapping = handlerMapping;
     }
+
+
+    /*
+     *
+     * displays all available commands
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/")
+    public String showHelp() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<RequestMappingInfo, HandlerMethod> entry  : this.handlerMapping.getHandlerMethods().entrySet()) {
+            sb.append(entry.getKey().getPatternsCondition().getPatterns().toArray()[0]);
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
 
 
     /*
