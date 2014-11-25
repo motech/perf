@@ -109,6 +109,7 @@ public class MockilServiceImpl implements MockilService {
         for (CampaignRecord campaign : campaigns) {
             String campaignName = campaign.getName();
             if (campaignName.matches(campaignNameRegex)) {
+                logger.info("Reading campaign {}", campaign.getName());
                 Integer i = Integer.parseInt(campaignName.replaceAll(campaignNameRegex, "$2"));
                 campaignList.add(i, campaignName(i));
                 if (campaign.getCampaignType() == CampaignType.ABSOLUTE) {
@@ -127,6 +128,9 @@ public class MockilServiceImpl implements MockilService {
                     phoneNumberList.add(j, recipient.getPhoneNumber());
                     if (j > maxExternalId) {
                         maxExternalId = j;
+                    }
+                    if (j % 100 == 0) {
+                        logger.info("Reading enrollment {}", externalId);
                     }
                 }
             }
@@ -401,6 +405,11 @@ public class MockilServiceImpl implements MockilService {
             messageCampaignService.deleteCampaign(campaignName);
             logger.debug("Deleted {}", campaignName);
         }
+
+        campaignList = new ArrayList<>();
+        absoluteCampaigns = new ArrayList<>();
+        externalIdList = new ArrayList<>();
+        phoneNumberList = new ArrayList<>();
 
         resetExpectations();
 

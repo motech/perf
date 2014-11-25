@@ -111,7 +111,8 @@ public class MockilController {
     @RequestMapping(value = "/create-enroll-many-offset/{period}")
     public String createEnrollManyOffset(@PathVariable String period, @PathVariable int number) {
         String campaignName = mockilService.createOffset(period);
-        return doEnrollMany(campaignName, number);
+        String enrollments = doEnrollMany(campaignName, number);
+        return String.format("%s - %s", campaignName, enrollments);
     }
 
 
@@ -167,7 +168,8 @@ public class MockilController {
     @RequestMapping(value = "/create-enroll-many-absolute/{dateOrPeriod}/{number}")
     public String createEnrollManyAbsolute(@PathVariable String dateOrPeriod, @PathVariable int number) {
         String campaignName = mockilService.createAbsolute(dateOrPeriod);
-        return doEnrollMany(campaignName, number);
+        String enrollments = doEnrollMany(campaignName, number);
+        return String.format("%s - %s", campaignName, enrollments);
     }
 
 
