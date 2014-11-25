@@ -10,6 +10,7 @@ public interface MockilService {
     String sendTestEvent();
     String expect(int number);
     String resetExpectations();
+    String getExpectations();
     String doCall();
     String dontCall();
     String resetAll();

@@ -301,6 +301,21 @@ public class MockilController {
 
 
     /*
+     * /expectations
+     *
+     *
+     * returns current expectations
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/expectations")
+    public String getExpectations() {
+        return mockilService.getExpectations();
+    }
+
+
+    /*
      * /send-campaign-event
      *
      * sends a fired campaign message event with random external id

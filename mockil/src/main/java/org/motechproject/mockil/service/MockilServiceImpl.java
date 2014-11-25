@@ -368,6 +368,16 @@ public class MockilServiceImpl implements MockilService {
     }
 
 
+    public String getExpectations() {
+        if (expecting) {
+            return String.format("Expecting %d out of a total of %d call%s",
+                    stillExpecting, expected, expected == 1 ? "" : "s");
+        } else {
+            return "No expectations.";
+        }
+    }
+
+
     public String resetExpectations() {
         expecting = false;
         stillExpecting  = 0;
