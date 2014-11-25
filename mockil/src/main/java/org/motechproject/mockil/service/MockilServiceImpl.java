@@ -395,13 +395,6 @@ public class MockilServiceImpl implements MockilService {
         List<CampaignRecord> campaigns  = messageCampaignService.getAllCampaignRecords();
         for (CampaignRecord campaign : campaigns) {
             String campaignName = campaign.getName();
-            List<CampaignEnrollmentRecord> enrollments  = messageCampaignService.search(
-                    new CampaignEnrollmentsQuery().withCampaignName(campaignName));
-            for (CampaignEnrollmentRecord enrollment : enrollments) {
-                String externalId = enrollment.getExternalId();
-                messageCampaignService.unenroll(externalId, campaignName);
-                logger.debug("Unenrolled {}", externalId);
-            }
             messageCampaignService.deleteCampaign(campaignName);
             logger.debug("Deleted {}", campaignName);
         }
