@@ -19,6 +19,7 @@ import org.motechproject.messagecampaign.userspecified.CampaignMessageRecord;
 import org.motechproject.messagecampaign.userspecified.CampaignRecord;
 import org.motechproject.mockil.database.Recipient;
 import org.motechproject.mockil.database.RecipientDataService;
+import org.motechproject.scheduler.service.MotechSchedulerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,10 +48,12 @@ public class MockilServiceImpl implements MockilService {
     private Logger logger = LoggerFactory.getLogger(MockilServiceImpl.class);
     private MessageCampaignService messageCampaignService;
     private EventRelay eventRelay;
+    private MotechSchedulerService schedulerService;
     private OutboundCallService outboundCallService;
     private RecipientDataService recipientDataService;
     private String hostName;
     private List<String> campaignList;
+    private List<String> absoluteCampaigns;
     private List<String> externalIdList;
     private List<String> phoneNumberList; //indexed the same way externalIdList is
     private Random rand;
@@ -63,11 +66,13 @@ public class MockilServiceImpl implements MockilService {
 
     @Autowired
     public MockilServiceImpl(EventRelay eventRelay, MessageCampaignService messageCampaignService,
-                             OutboundCallService outboundCallService, RecipientDataService recipientDataService) {
+                             OutboundCallService outboundCallService, RecipientDataService recipientDataService,
+                             MotechSchedulerService schedulerService) {
         this.eventRelay = eventRelay;
         this.messageCampaignService = messageCampaignService;
         this.outboundCallService = outboundCallService;
         this.recipientDataService = recipientDataService;
+        this.schedulerService = schedulerService;
         setupData();
     }
 
@@ -86,6 +91,7 @@ public class MockilServiceImpl implements MockilService {
         Integer maxCampaignId = 0;
         Integer maxExternalId = 0;
         campaignList = new ArrayList<>();
+        absoluteCampaigns = new ArrayList<>();
         externalIdList = new ArrayList<>();
         phoneNumberList = new ArrayList<>();
         rand = new Random();
@@ -105,6 +111,9 @@ public class MockilServiceImpl implements MockilService {
             if (campaignName.matches(campaignNameRegex)) {
                 Integer i = Integer.parseInt(campaignName.replaceAll(campaignNameRegex, "$2"));
                 campaignList.add(i, campaignName(i));
+                if (campaign.getCampaignType() == CampaignType.ABSOLUTE) {
+                    absoluteCampaigns.add(campaign.getName());
+                }
                 if (i > maxCampaignId) {
                     maxCampaignId = i;
                 }
@@ -262,6 +271,8 @@ public class MockilServiceImpl implements MockilService {
         messageCampaignService.saveCampaign(campaign);
         logger.info(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
 
+        absoluteCampaigns.add(campaignName);
+
         return campaignName;
     }
 
@@ -302,8 +313,8 @@ public class MockilServiceImpl implements MockilService {
 
         Time now = null;
         LocalDate today = LocalDate.now();
-        CampaignRecord campaign = messageCampaignService.getCampaignRecord(campaignName);
-        if (campaign.getCampaignType() != CampaignType.ABSOLUTE) {
+
+        if (!absoluteCampaigns.contains(campaignName)) {
             now = new Time(DateTime.now().getHourOfDay(), DateTime.now().getMinuteOfHour());
         }
         int id = createRecipient();
@@ -371,5 +382,28 @@ public class MockilServiceImpl implements MockilService {
     public String dontCall() {
         dontCall = true;
         return "won't call";
+    }
+
+
+    public String resetAll() {
+        schedulerService.safeUnscheduleAllJobs("org.motechproject.messagecampaign");
+
+        List<CampaignRecord> campaigns  = messageCampaignService.getAllCampaignRecords();
+        for (CampaignRecord campaign : campaigns) {
+            String campaignName = campaign.getName();
+            List<CampaignEnrollmentRecord> enrollments  = messageCampaignService.search(
+                    new CampaignEnrollmentsQuery().withCampaignName(campaignName));
+            for (CampaignEnrollmentRecord enrollment : enrollments) {
+                String externalId = enrollment.getExternalId();
+                messageCampaignService.unenroll(externalId, campaignName);
+                logger.debug("Unenrolled {}", externalId);
+            }
+            messageCampaignService.deleteCampaign(campaignName);
+            logger.debug("Deleted {}", campaignName);
+        }
+
+        resetExpectations();
+
+        return "OK";
     }
 }

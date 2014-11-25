@@ -217,7 +217,7 @@ public class MockilController {
                 mockilService.enroll(campaignName);
             }
             if (i < number) {
-                ret += "-" + mockilService.enroll(campaignName);
+                ret += " ... " + mockilService.enroll(campaignName);
             }
         }
 
@@ -384,6 +384,21 @@ public class MockilController {
     @RequestMapping(value = "/dont-call")
     public String dontCall() {
         return mockilService.dontCall();
+    }
+
+
+    /*
+     * /reset-all
+     *
+     * removes all campaigns & enrollments & clears schedule
+     * returns 'OK'
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/reset-all")
+    public String resetAll() {
+        return mockilService.resetAll();
     }
 
 

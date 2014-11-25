@@ -12,4 +12,5 @@ public interface MockilService {
     String resetExpectations();
     String doCall();
     String dontCall();
+    String resetAll();
 }
