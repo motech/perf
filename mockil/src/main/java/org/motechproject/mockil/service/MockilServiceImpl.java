@@ -342,7 +342,7 @@ public class MockilServiceImpl implements MockilService {
             long expectations = Long.valueOf(jedis.get(REDIS_EXPECTATIONS));
             float rate = (float) Long.valueOf(jedis.get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
             logger.info("Measured {} calls at {} calls/second", expectations, rate);
-            jedis.set(REDIS_EXPECTING, "0");
+            jedis.set(REDIS_EXPECTATIONS, "0");
             jedis.del(REDIS_TIMESTAMP);
         }
 
@@ -356,7 +356,7 @@ public class MockilServiceImpl implements MockilService {
         Jedis jedis = pool.use();
         jedis.incrBy(REDIS_EXPECTATIONS, number);
         jedis.incrBy(REDIS_EXPECTING, number);
-        String expecting = jedis.get(REDIS_EXPECTATIONS);
+        String expecting = jedis.get(REDIS_EXPECTING);
         logger.info("Expectations: {}, expecting: {}", jedis.get(REDIS_EXPECTATIONS), expecting);
 
         pool.unuse(jedis);
