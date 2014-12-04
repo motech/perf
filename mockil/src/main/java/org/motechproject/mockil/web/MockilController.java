@@ -208,7 +208,7 @@ public class MockilController {
 
 
     private String doEnrollMany(String campaignName, int number) {
-        mockilService.expect(number);
+        mockilService.setExpectations(number);
         long start = System.currentTimeMillis();
         String ret = "";
 
@@ -223,7 +223,7 @@ public class MockilController {
             }
         }
 
-        if (logger.isDebugEnabled()) {
+        if (logger.isInfoEnabled()) {
             long millis = System.currentTimeMillis() - start;
             float rate = (float) number * MILLIS_PER_SECOND / millis;
             String plural = rate == 1 ? "" : "s";
@@ -280,7 +280,7 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/expect/{number}")
     public String expect(@PathVariable int number) {
-        return mockilService.expect(number);
+        return mockilService.setExpectations(number);
     }
 
 
@@ -356,7 +356,7 @@ public class MockilController {
     @ResponseBody
     @RequestMapping(value = "/send-many-test-events/{number}")
     public String sendManyTestEvents(@PathVariable int number) {
-        mockilService.expect(number);
+        mockilService.setExpectations(number);
         long start = System.currentTimeMillis();
 
         for (int i=0 ; i < number; i++) {

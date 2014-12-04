@@ -8,7 +8,7 @@ public interface MockilService {
     String enroll(String campaignName);
     String sendCampaignEvent();
     String sendTestEvent();
-    String expect(int number);
+    String setExpectations(int number);
     String resetExpectations();
     String getExpectations();
     String doCall();
