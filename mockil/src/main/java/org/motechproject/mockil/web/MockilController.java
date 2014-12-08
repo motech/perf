@@ -423,6 +423,6 @@ public class MockilController {
     @ResponseBody
     @ExceptionHandler(Exception.class)
     public String handleException(Exception e) {
-        return e.getMessage();
+        return String.format("### EXCEPTION ###: %s", e.toString());
     }
 }
