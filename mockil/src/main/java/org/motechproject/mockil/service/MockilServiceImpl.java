@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -47,7 +49,6 @@ public class MockilServiceImpl implements MockilService {
     private static final String REDIS_SETUP = "setup";
     private static final String REDIS_TIMESTAMP = "timestamp";
     private static final String TEST_EVENT = "org.motechproject.mockil.test";
-    private static final Pool pool = new Pool(REDIS_SERVER, 20); //assuming 20 threads
     private Logger logger = LoggerFactory.getLogger(MockilServiceImpl.class);
     private MessageCampaignService messageCampaignService;
     private EventRelay eventRelay;
@@ -61,6 +62,7 @@ public class MockilServiceImpl implements MockilService {
     private List<String> phoneNumberList; //indexed the same way externalIdList is
     private Random rand;
     private boolean dontCall = false;
+    JedisPool jedisPool;
 
 
     @Autowired
@@ -79,6 +81,10 @@ public class MockilServiceImpl implements MockilService {
         return String.format("%s%d", hostName, Thread.currentThread().getId());
     }
 
+    private String hostAndThreadId() {
+        return String.format("%s-%d", hostName, Thread.currentThread().getId());
+    }
+
     private String campaignName(int id) {
         return String.format("%s-C%d", hostName, id);
     }
@@ -90,6 +96,8 @@ public class MockilServiceImpl implements MockilService {
     private synchronized void setupData() {
         rand = new Random();
 
+        jedisPool = new JedisPool(new JedisPoolConfig(), "localhost");
+        
         try {
             InetAddress ip = InetAddress.getLocalHost();
             hostName = ip.getHostName();
@@ -97,19 +105,43 @@ public class MockilServiceImpl implements MockilService {
             throw new RuntimeException("Could not get instance host name: " + e.toString(), e);
         }
 
-        try (AutoPool pool = new AutoPool()) {
-            pool.getJedis().setnx(REDIS_EXPECTING, "0");
-            pool.getJedis().setnx(REDIS_EXPECTATIONS, "0");
-            pool.getJedis().setnx(REDIS_SETUP, threadId());
-            if (threadId().equals(pool.getJedis().get(REDIS_SETUP))) {
+        resetAll();
+    }
+
+    public String resetAll() {
+        logger.info("Resetting All...");
+        long milliStart = System.currentTimeMillis();
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.setnx(REDIS_SETUP, threadId());
+            if (threadId().equals(jedis.get(REDIS_SETUP))) {
                 logger.info("Thread {} is resetting the message campaign data", threadId());
-                resetAll();
+
+                schedulerService.safeUnscheduleAllJobs("org.motechproject.messagecampaign");
+
+                List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
+                for (CampaignRecord campaign : campaigns) {
+                    String campaignName = campaign.getName();
+                    messageCampaignService.deleteCampaign(campaignName);
+                    logger.debug("Deleted {}", campaignName);
+                }
             } else {
                 logger.info("Thread {} is not resetting the message campaign data since thread {} is doing it",
-                        threadId(), pool.getJedis().get(REDIS_SETUP));
+                        threadId(), jedis.get(REDIS_SETUP));
             }
-            pool.getJedis().del(REDIS_SETUP);
+            jedis.del(REDIS_SETUP);
         }
+
+        campaignList = new ArrayList<>();
+        absoluteCampaigns = new ArrayList<>();
+        externalIdList = new ArrayList<>();
+        phoneNumberList = new ArrayList<>();
+
+        resetExpectations();
+
+        logger.info("All was reset in {}ms", System.currentTimeMillis() - milliStart);
+
+        return "OK";
     }
 
     private String randomPhoneNumber() {
@@ -296,25 +328,25 @@ public class MockilServiceImpl implements MockilService {
     private synchronized void meetExpectation() {
         logger.debug("Meet expectation");
 
-        try (AutoPool pool = new AutoPool()) {
+        try (Jedis jedis = jedisPool.getResource()) {
 
             // Start timer if not already started
-            if (!pool.getJedis().exists(REDIS_TIMESTAMP)) {
-                List<String> t = pool.getJedis().time();
+            if (!jedis.exists(REDIS_TIMESTAMP)) {
+                List<String> t = jedis.time();
                 Long millis = Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
-                pool.getJedis().setnx(REDIS_TIMESTAMP, millis.toString());
+                jedis.setnx(REDIS_TIMESTAMP, millis.toString());
             }
 
-            long expecting = pool.getJedis().decr(REDIS_EXPECTING);
+            long expecting = jedis.decr(REDIS_EXPECTING);
 
             // All expectations met
-            if (0 == expecting) {
-                List<String> t = pool.getJedis().time();
+            if (expecting <= 0) {
+                List<String> t = jedis.time();
                 long milliStop = Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
-                long milliStart = Long.valueOf(pool.getJedis().get(REDIS_TIMESTAMP));
+                long milliStart = Long.valueOf(jedis.get(REDIS_TIMESTAMP));
                 long millis = milliStop - milliStart;
-                long expectations = Long.valueOf(pool.getJedis().get(REDIS_EXPECTATIONS));
-                float rate = (float) Long.valueOf(pool.getJedis().get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
+                long expectations = Long.valueOf(jedis.get(REDIS_EXPECTATIONS));
+                float rate = (float) Long.valueOf(jedis.get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
                 logger.info("Measured {} calls at {} calls/second", expectations, rate);
                 resetAll();
             }
@@ -324,28 +356,28 @@ public class MockilServiceImpl implements MockilService {
     public String setExpectations(int number) {
         logger.debug("Raising expectations by {}", number);
 
-        try (AutoPool pool = new AutoPool()) {
-            pool.getJedis().incrBy(REDIS_EXPECTATIONS, number);
-            pool.getJedis().incrBy(REDIS_EXPECTING, number);
-            String expecting = pool.getJedis().get(REDIS_EXPECTING);
-            logger.info("Expectations: {}, expecting: {}", pool.getJedis().get(REDIS_EXPECTATIONS), expecting);
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.incrBy(REDIS_EXPECTATIONS, number);
+            jedis.incrBy(REDIS_EXPECTING, number);
+            String expecting = jedis.get(REDIS_EXPECTING);
+            logger.info("Expectations: {}, expecting: {}", jedis.get(REDIS_EXPECTATIONS), expecting);
             return expecting;
         }
     }
 
     public String getExpectations() {
-        try (AutoPool pool = new AutoPool()) {
-            return String.format("Expectations: %s, expecting: %s", pool.getJedis().get(REDIS_EXPECTATIONS),
-                    pool.getJedis().get(REDIS_EXPECTING));
+        try (Jedis jedis = jedisPool.getResource()) {
+            return String.format("Expectations: %s, expecting: %s", jedis.get(REDIS_EXPECTATIONS),
+                    jedis.get(REDIS_EXPECTING));
         }
     }
 
     public String resetExpectations() {
-        try (AutoPool pool = new AutoPool()) {
-            pool.getJedis().set(REDIS_EXPECTING, "0");
-            pool.getJedis().set(REDIS_EXPECTATIONS, "0");
-            pool.getJedis().del(REDIS_TIMESTAMP);
-            logger.info("Expectations: {}, expecting: {}", pool.getJedis().get(REDIS_EXPECTATIONS), pool.getJedis()
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.set(REDIS_EXPECTING, "0");
+            jedis.set(REDIS_EXPECTATIONS, "0");
+            jedis.del(REDIS_TIMESTAMP);
+            logger.info("Expectations: {}, expecting: {}", jedis.get(REDIS_EXPECTATIONS), jedis
                     .get(REDIS_EXPECTING));
             return "OK";
         }
@@ -359,77 +391,5 @@ public class MockilServiceImpl implements MockilService {
     public String dontCall() {
         dontCall = true;
         return "won't call";
-    }
-
-    public String resetAll() {
-        logger.info("Resetting All...");
-        long milliStart = System.currentTimeMillis();
-
-        try (AutoPool pool = new AutoPool()) {
-            pool.getJedis().setnx(REDIS_SETUP, threadId());
-            if (threadId().equals(pool.getJedis().get(REDIS_SETUP))) {
-                logger.info("Thread {} is resetting the message campaign data", threadId());
-
-                schedulerService.safeUnscheduleAllJobs("org.motechproject.messagecampaign");
-
-                List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
-                for (CampaignRecord campaign : campaigns) {
-                    String campaignName = campaign.getName();
-                    messageCampaignService.deleteCampaign(campaignName);
-                    logger.debug("Deleted {}", campaignName);
-                }
-            } else {
-                logger.info("Thread {} is not resetting the message campaign data since thread {} is doing it",
-                        threadId(), pool.getJedis().get(REDIS_SETUP));
-            }
-            pool.getJedis().del(REDIS_SETUP);
-        }
-
-        campaignList = new ArrayList<>();
-        absoluteCampaigns = new ArrayList<>();
-        externalIdList = new ArrayList<>();
-        phoneNumberList = new ArrayList<>();
-
-        resetExpectations();
-
-        logger.info("All was reset in {}ms", System.currentTimeMillis() - milliStart);
-
-        return "OK";
-    }
-
-    static class Pool {
-        private List<Jedis> available;
-
-        public Pool(String URL, int size) {
-            available = new ArrayList<>();
-            for (int i=0 ; i<size ; i++) {
-                available.add(new Jedis(URL));
-            }
-        }
-
-        public synchronized Jedis use() {
-            return available.remove(0);
-        }
-
-        public synchronized void unuse(Jedis jedis) {
-            available.add(jedis);
-        }
-    }
-
-    class AutoPool implements AutoCloseable {
-        private Jedis jedis;
-
-        public AutoPool() {
-            jedis = pool.use();
-        }
-
-        public Jedis getJedis() {
-            return jedis;
-        }
-
-        public void close() {
-            pool.unuse(jedis);
-            this.jedis = null;
-        }
     }
 }
