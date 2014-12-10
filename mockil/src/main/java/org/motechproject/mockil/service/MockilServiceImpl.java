@@ -76,7 +76,7 @@ public class MockilServiceImpl implements MockilService {
     }
 
     private String threadId() {
-        return String.format("%d", Thread.currentThread().getId());
+        return String.format("%s%d", hostName, Thread.currentThread().getId());
     }
 
     private String campaignName(int id) {
@@ -162,10 +162,11 @@ public class MockilServiceImpl implements MockilService {
     }
 
     private String call(String externalId) {
-        logger.debug("call({})", externalId);
-
         if (dontCall) {
+            logger.info("not calling {}", externalId);
             return externalId;
+        } else {
+            logger.info("calling {}", externalId);
         }
 
         Recipient recipient = recipientDataService.findByExternalId(externalId);
@@ -315,7 +316,7 @@ public class MockilServiceImpl implements MockilService {
                 long expectations = Long.valueOf(pool.getJedis().get(REDIS_EXPECTATIONS));
                 float rate = (float) Long.valueOf(pool.getJedis().get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
                 logger.info("Measured {} calls at {} calls/second", expectations, rate);
-                resetExpectations();
+                resetAll();
             }
         }
     }
@@ -361,7 +362,8 @@ public class MockilServiceImpl implements MockilService {
     }
 
     public String resetAll() {
-        logger.info("Deleting all message campaign data.");
+        logger.info("Resetting All...");
+        long milliStart = System.currentTimeMillis();
 
         try (AutoPool pool = new AutoPool()) {
             pool.getJedis().setnx(REDIS_SETUP, threadId());
@@ -389,6 +391,8 @@ public class MockilServiceImpl implements MockilService {
         phoneNumberList = new ArrayList<>();
 
         resetExpectations();
+
+        logger.info("All was reset in {}ms", System.currentTimeMillis() - milliStart);
 
         return "OK";
     }
