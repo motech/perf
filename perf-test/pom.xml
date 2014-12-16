@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <groupId>org.motechproject</groupId>
-    <version>0.25-SNAPSHOT</version>
+    <version>0.26-SNAPSHOT</version>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>perf-test</artifactId>
     <name>Performance Test Module</name>
@@ -42,13 +42,13 @@
         <dependency>
             <groupId>org.motechproject</groupId>
             <artifactId>motech-pax-it-container</artifactId>
-            <version>0.25-SNAPSHOT</version>
+            <version>0.26-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.motechproject</groupId>
             <artifactId>motech-pax-it</artifactId>
-            <version>0.25-SNAPSHOT</version>
+            <version>0.26-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
