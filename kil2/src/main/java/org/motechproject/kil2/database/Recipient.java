@@ -5,6 +5,8 @@ import org.motechproject.mds.annotations.Field;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.jdo.annotations.Index;
+
 @Entity
 public class Recipient {
 
@@ -20,6 +22,7 @@ public class Recipient {
     private String expectedDeliveryDate;
 
     @Field
+    @Index
     private String slot;
 
     @Field

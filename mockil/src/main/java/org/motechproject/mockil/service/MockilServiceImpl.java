@@ -96,7 +96,7 @@ public class MockilServiceImpl implements MockilService {
     private synchronized void setupData() {
         rand = new Random();
 
-        jedisPool = new JedisPool(new JedisPoolConfig(), "localhost");
+        jedisPool = new JedisPool(new JedisPoolConfig(), REDIS_SERVER);
         
         try {
             InetAddress ip = InetAddress.getLocalHost();
@@ -259,12 +259,19 @@ public class MockilServiceImpl implements MockilService {
         campaign.setName(campaignName);
         campaign.setCampaignType(CampaignType.ABSOLUTE);
 
-        CampaignMessageRecord message = new CampaignMessageRecord();
-        message.setName("firstMessage");
-        message.setDate(date);
-        message.setStartTime(time);
+        CampaignMessageRecord firstMessage = new CampaignMessageRecord();
+        firstMessage.setName("firstMessage");
+        firstMessage.setDate(date);
+        firstMessage.setStartTime(time);
+        firstMessage.setMessageKey("first");
 
-        campaign.setMessages(Arrays.asList(message));
+        CampaignMessageRecord lastMessage = new CampaignMessageRecord();
+        lastMessage.setName("lastMessage");
+        lastMessage.setDate(date.plusYears(1));
+        lastMessage.setStartTime(time);
+        lastMessage.setMessageKey("last");
+
+        campaign.setMessages(Arrays.asList(firstMessage, lastMessage));
         messageCampaignService.saveCampaign(campaign);
         logger.info(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
 

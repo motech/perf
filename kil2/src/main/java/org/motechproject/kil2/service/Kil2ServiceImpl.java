@@ -252,18 +252,21 @@ public class Kil2ServiceImpl implements Kil2Service {
         String slotName = slotList.get(slot-1);
         try (Jedis jedis = jedisPool.getResource()) {
             logger.info("Creating {} recipient{}...", count, count == 1 ? "" : "s");
-            long milliStart = System.currentTimeMillis();
+            long millis, milliStart = System.currentTimeMillis();
+            float rate;
             for (int i = 0; i < count; i++) {
                 String externalId = String.format("EID%s", jedis.incr(REDIS_EXTERNAL_ID));
                 Recipient recipient = new Recipient(externalId, randomPhoneNumber(), randomEDD(), slotName,
                         randomActiveRecipient());
                 recipientDataService.create(recipient);
                 if (i>0 && i%100==0) {
-                    logger.info("Created {}/{}", i, count);
+                    millis = System.currentTimeMillis() - milliStart;
+                    rate = (float) i * MILLIS_PER_SECOND / millis;
+                    logger.info(String.format("Created %d/%d recipients for %s (%s/sec)", i, count, slotName, rate));
                 }
             }
-            long millis = System.currentTimeMillis() - milliStart;
-            float rate = (float) count * MILLIS_PER_SECOND / millis;
+            millis = System.currentTimeMillis() - milliStart;
+            rate = (float) count * MILLIS_PER_SECOND / millis;
             logger.info(String.format("Created %d recipient%s for %s in %dms (%s/sec)", count, count == 1 ? "" : "s",
                     slotName, millis, rate));
         }
@@ -317,8 +320,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             logger.info(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
 
             logger.info(String.format("Enrolling %s in %s", campaignName, slotName));
-            CampaignRequest campaignRequest = new CampaignRequest(slotName, campaignName, LocalDate.now(),
-                    null);
+            CampaignRequest campaignRequest = new CampaignRequest(slotName, campaignName, LocalDate.now(), null);
             messageCampaignService.enroll(campaignRequest);
 
             int slotRecipientCount = (int)recipientDataService.countFindBySlot(slotName);
