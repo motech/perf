@@ -129,7 +129,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             logger.info("Deleted {} in {}ms", campaignName, System.currentTimeMillis() - milliStart2);
         }
 
-        logger.info("Deleted in {}ms", System.currentTimeMillis() - milliStart);
+        logger.error("Deleted in {}ms", System.currentTimeMillis() - milliStart);
 
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.set(REDIS_CAMPAIGN_ID, "0");
@@ -145,7 +145,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
         recipientDataService.deleteAll();
 
-        logger.info("Deleted in {}ms", System.currentTimeMillis() - milliStart);
+        logger.error("Deleted in {}ms", System.currentTimeMillis() - milliStart);
 
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.set(REDIS_EXTERNAL_ID, "0");
@@ -173,7 +173,7 @@ public class Kil2ServiceImpl implements Kil2Service {
         List<Recipient> recipients = recipientDataService.findBySlot(slotName);
         long millis = System.currentTimeMillis() - milliStart;
         float rate = (float) recipients.size() * MILLIS_PER_SECOND / millis;
-        logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", recipients.size(),
+        logger.error(String.format("Read %d recipient%s in %dms (%s/sec)", recipients.size(),
                 recipients.size() == 1 ? "" : "s", millis, rate));
         milliStart = System.currentTimeMillis();
         for(Recipient recipient : recipients) {
@@ -185,7 +185,7 @@ public class Kil2ServiceImpl implements Kil2Service {
         }
         millis = System.currentTimeMillis() - milliStart;
         rate = (float) count * MILLIS_PER_SECOND / millis;
-        logger.info(String.format("Sent %d message%s in %dms (%s/sec)", count, count == 1 ? "" : "s", millis, rate));
+        logger.error(String.format("Sent %d message%s in %dms (%s/sec)", count, count == 1 ? "" : "s", millis, rate));
     }
 
 
@@ -267,7 +267,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             }
             millis = System.currentTimeMillis() - milliStart;
             rate = (float) count * MILLIS_PER_SECOND / millis;
-            logger.info(String.format("Created %d recipient%s for %s in %dms (%s/sec)", count, count == 1 ? "" : "s",
+            logger.error(String.format("Created %d recipient%s for %s in %dms (%s/sec)", count, count == 1 ? "" : "s",
                     slotName, millis, rate));
         }
         return String.format("%s:%d", slotName, count);
@@ -317,9 +317,9 @@ public class Kil2ServiceImpl implements Kil2Service {
 
             campaign.setMessages(Arrays.asList(firstMessage, lastMessage));
             messageCampaignService.saveCampaign(campaign);
-            logger.info(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
+            logger.error(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
 
-            logger.info(String.format("Enrolling %s in %s", campaignName, slotName));
+            logger.error(String.format("Enrolling %s in %s", campaignName, slotName));
             CampaignRequest campaignRequest = new CampaignRequest(slotName, campaignName, LocalDate.now(), null);
             messageCampaignService.enroll(campaignRequest);
 
@@ -353,7 +353,7 @@ public class Kil2ServiceImpl implements Kil2Service {
                 long millis = milliStop - milliStart;
                 long expectations = Long.valueOf(jedis.get(REDIS_EXPECTATIONS));
                 float rate = (float) Long.valueOf(jedis.get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
-                logger.info("Measured {} calls at {} calls/second", expectations, rate);
+                logger.error("Measured {} calls at {} calls/second", expectations, rate);
                 resetExpectations();
             }
         }
@@ -366,7 +366,7 @@ public class Kil2ServiceImpl implements Kil2Service {
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.set(REDIS_EXPECTATIONS, String.valueOf(count));
             jedis.set(REDIS_EXPECTING, String.valueOf(count));
-            logger.info("Expectations: {}, expecting: {}", jedis.get(REDIS_EXPECTATIONS), jedis.get(REDIS_EXPECTING));
+            logger.error("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
             return String.valueOf(count);
         }
     }
@@ -384,7 +384,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             jedis.set(REDIS_EXPECTING, "0");
             jedis.set(REDIS_EXPECTATIONS, "0");
             jedis.del(REDIS_TIMESTAMP);
-            logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
+            logger.error("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
             return "OK";
         }
     }

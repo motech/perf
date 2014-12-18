@@ -24,6 +24,10 @@
         </property>
     </bean>
 
+    <bean id="kil2Properties" factory-bean="kil2Settings" factory-method="getProperties">
+        <constructor-arg name="filename" value="kil2.properties"/>
+    </bean>
+
     <bean id="moduleRegistrationData" class="org.motechproject.osgi.web.ModuleRegistrationData">
         <constructor-arg name="moduleName" value="kil2" />
         <constructor-arg name="i18n">
@@ -32,6 +36,8 @@
             </map>
         </constructor-arg>
     </bean>
+
+    <osgi:reference id="configurationService" interface="org.motechproject.config.service.ConfigurationService"/>
 
     <osgi:service ref="kil2Service" interface="org.motechproject.kil2.service.Kil2Service" />
 
