@@ -1,0 +1,2 @@
+fake-factory==0.4.2
+wsgiref==0.1.2
