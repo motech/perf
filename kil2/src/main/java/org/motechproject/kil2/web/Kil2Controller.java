@@ -60,72 +60,54 @@ public class Kil2Controller {
 
 
     /*
-     * /create-campaign/{dateOrPeriod}/{slot}
+     * /create-campaign/{slot}/{day}/{dateOrPeriod}
      *
      * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
-     * {slot}: slot number
-     *
-     * creates an absolute campaign
-     * returns the campaign name
+     * {slot}: slot
+     * {day}: day
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-campaign/{dateOrPeriod}/{slot}")
-    public String createCampaign(@PathVariable String dateOrPeriod, @PathVariable int slot) {
-        return kil2Service.createCampaign(dateOrPeriod, slot);
+    @RequestMapping(value = "/create-campaign/{slot}/{day}/{dateOrPeriod}")
+    public String createCampaign(@PathVariable String dateOrPeriod, @PathVariable String slot,
+                                 @PathVariable String day) {
+        return kil2Service.createCampaign(dateOrPeriod, slot, day);
     }
 
 
 
     /*
-     * /create-recipients/{slot}/{count}
+     * /create-recipients/{slot}/{day}/{active}/{count}
      *
-     * {slot}: slot number
+     * {slot}: slot
+     * {day}: day
+     * {active}: active status
      * {count}: number of recipients
      *
-     * creates an absolute campaign
-     * returns the campaign name
-     *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-recipients/{slot}/{count}")
-    public String createRecipients(@PathVariable int slot, @PathVariable int count) {
-        return kil2Service.createRecipients(slot, count);
+    @RequestMapping(value = "/create-recipients/{slot}/{day}/{active}/{count}")
+    public String createRecipients(@PathVariable String slot, @PathVariable String day, @PathVariable Boolean active,
+                                   @PathVariable int count) {
+        return kil2Service.createRecipients(slot, day, active, count);
     }
 
 
 
     /*
-     * /expect/{number}
+     * /status
      *
-     * {number}: integer, number of expected calls
      *
-     * sets call expectations for {number} calls
-     * returns {number}
+     * returns overall status
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/expect/{number}")
-    public String expect(@PathVariable int number) {
-        return kil2Service.setExpectations(number);
-    }
-
-
-    /*
-     * /expectations
-     *
-     *
-     * returns current expectations
-     *
-     */
-    @ResponseStatus(HttpStatus.OK)
-    @ResponseBody
-    @RequestMapping(value = "/expectations")
+    @RequestMapping(value = "/status")
     public String getExpectations() {
-        return kil2Service.getExpectations();
+        return kil2Service.getStatus();
     }
 
 
@@ -133,7 +115,6 @@ public class Kil2Controller {
      * /delete-campaigns
      *
      * removes all campaigns & enrollments & clears schedule
-     * returns 'OK'
      *
      */
     @ResponseStatus(HttpStatus.OK)

@@ -41,7 +41,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
     private final static String REDIS_SERVER_PROPERTY = "kil2.redis_server";
     private final static String SLOTS_PROPERTY = "kil2.slots";
-    private final static String ACTIVE_RECIPIENT_PERCENT_PROPERTY = "kil2.active_recipient_percent";
+    private final static String DAYS_PROPERTY = "kil2.days";
 
     private static final String CALL_EVENT = "org.motechproject.kil2.call";
 
@@ -52,7 +52,6 @@ public class Kil2ServiceImpl implements Kil2Service {
     private static final String REDIS_EXPECTATIONS = "expectations";
     private static final String REDIS_EXPECTING = "expecting";
     private static final String REDIS_TIMESTAMP = "timestamp";
-    private static final String REDIS_EXTERNAL_ID = "external_id";
     private static final String REDIS_CAMPAIGN_ID = "campaign_id";
     private Logger logger = LoggerFactory.getLogger(Kil2ServiceImpl.class);
     SettingsFacade settingsFacade;
@@ -62,8 +61,8 @@ public class Kil2ServiceImpl implements Kil2Service {
     private RecipientDataService recipientDataService;
     private MotechSchedulerService schedulerService;
     private String redisServer;
-    private int activeRecipientPercent;
     private List<String> slotList;
+    private List<String> dayList;
     private String hostName;
     private Random rand;
     JedisPool jedisPool;
@@ -86,9 +85,13 @@ public class Kil2ServiceImpl implements Kil2Service {
     private synchronized void setupData() {
 
         redisServer = settingsFacade.getProperty(REDIS_SERVER_PROPERTY);
-        activeRecipientPercent = Integer.valueOf(settingsFacade.getProperty(ACTIVE_RECIPIENT_PERCENT_PROPERTY));
         slotList = Arrays.asList(settingsFacade.getProperty(SLOTS_PROPERTY).split("\\s*,\\s*"));
-        
+        dayList = Arrays.asList(settingsFacade.getProperty(DAYS_PROPERTY).split("\\s*,\\s*"));
+
+        logger.info("redis server: {}", redisServer);
+        logger.info("slot list: {}", slotList);
+        logger.info("day list: {}", dayList);
+
         rand = new Random();
 
         jedisPool = new JedisPool(new JedisPoolConfig(), redisServer);
@@ -103,14 +106,8 @@ public class Kil2ServiceImpl implements Kil2Service {
         resetExpectations();
 
         try (Jedis jedis = jedisPool.getResource()) {
-            jedis.setnx(REDIS_EXTERNAL_ID, "0");
             jedis.setnx(REDIS_CAMPAIGN_ID, "0");
         }
-    }
-
-
-    private String threadId() {
-        return String.format("%s-%d", hostName, Thread.currentThread().getId());
     }
 
 
@@ -129,7 +126,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             logger.info("Deleted {} in {}ms", campaignName, System.currentTimeMillis() - milliStart2);
         }
 
-        logger.error("Deleted in {}ms", System.currentTimeMillis() - milliStart);
+        logger.info("Deleted in {}ms", System.currentTimeMillis() - milliStart);
 
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.set(REDIS_CAMPAIGN_ID, "0");
@@ -141,15 +138,17 @@ public class Kil2ServiceImpl implements Kil2Service {
 
     public String deleteRecipients() {
         logger.info("Delete recipients...");
+
+        int count = (int)recipientDataService.count();
+
         long milliStart = System.currentTimeMillis();
 
         recipientDataService.deleteAll();
 
-        logger.error("Deleted in {}ms", System.currentTimeMillis() - milliStart);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(REDIS_EXTERNAL_ID, "0");
-        }
+        long millis = System.currentTimeMillis() - milliStart;
+        float rate = (float) count * MILLIS_PER_SECOND / millis;
+        logger.info(String.format("Deleted %d recipient%s in %dms (%s/sec)", count, count == 1 ? "" : "s", millis,
+                rate));
 
         return "OK";
     }
@@ -163,17 +162,34 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
+    private String slotFromExternalID(String externalID) {
+        return externalID.substring(0, 2);
+    }
+
+
+    private String dayFromExternalID(String externalID) {
+        return externalID.substring(2, 3);
+    }
+
+
+    private String externalIDFromSlotDay(String slot, String day) {
+        return slot+day;
+    }
+
+
     @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
     public void handleCampaignMessageEvent(MotechEvent event) {
         logger.info(event.toString());
-        String slotName = (String)event.getParameters().get("ExternalID");
+        String externalID = (String)event.getParameters().get("ExternalID");
+        String slot = slotFromExternalID(externalID);
+        String day = dayFromExternalID(externalID);
 
         int count = 0;
         long milliStart = System.currentTimeMillis();
-        List<Recipient> recipients = recipientDataService.findBySlot(slotName);
+        List<Recipient> recipients = recipientDataService.findByActiveSlotDay(slot, day, true);
         long millis = System.currentTimeMillis() - milliStart;
         float rate = (float) recipients.size() * MILLIS_PER_SECOND / millis;
-        logger.error(String.format("Read %d recipient%s in %dms (%s/sec)", recipients.size(),
+        logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", recipients.size(),
                 recipients.size() == 1 ? "" : "s", millis, rate));
         milliStart = System.currentTimeMillis();
         for(Recipient recipient : recipients) {
@@ -185,13 +201,13 @@ public class Kil2ServiceImpl implements Kil2Service {
         }
         millis = System.currentTimeMillis() - milliStart;
         rate = (float) count * MILLIS_PER_SECOND / millis;
-        logger.error(String.format("Sent %d message%s in %dms (%s/sec)", count, count == 1 ? "" : "s", millis, rate));
+        logger.info(String.format("Sent %d message%s in %dms (%s/sec)", count, count == 1 ? "" : "s", millis, rate));
     }
 
 
     @MotechListener(subjects = { CALL_EVENT })
     public void handleCallEvent(MotechEvent event) {
-        logger.info(event.toString());
+        logger.debug(event.toString());
         String phoneNumber = (String)event.getParameters().get("to");
         call(phoneNumber);
         meetExpectation();
@@ -199,7 +215,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
 
     private String call(String phoneNumber) {
-        logger.info("calling {}", phoneNumber);
+        logger.debug("calling {}", phoneNumber);
 
         Map<String, String> params = new HashMap<>();
         params.put("to", phoneNumber.replaceAll("[^0-9]", ""));
@@ -240,45 +256,54 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    private boolean randomActiveRecipient() {
-        return rand.nextInt(100) > activeRecipientPercent ? false : true;
-    }
-
-
-    public String createRecipients(int slot, int count) {
-        if (slot < 1 || slot > slotList.size()) {
-            return String.format("### INVALID SLOT ### Slot number must be between 1 and %d", slotList.size());
+    public String createRecipients(String slot, String day, Boolean isActive, int count) {
+        if (!slotList.contains(slot)) {
+            return String.format("%s is not a valid slot. Valid slots: %s", slot, slotList);
         }
-        String slotName = slotList.get(slot-1);
-        try (Jedis jedis = jedisPool.getResource()) {
-            logger.info("Creating {} recipient{}...", count, count == 1 ? "" : "s");
-            long millis, milliStart = System.currentTimeMillis();
-            float rate;
-            for (int i = 0; i < count; i++) {
-                String externalId = String.format("EID%s", jedis.incr(REDIS_EXTERNAL_ID));
-                Recipient recipient = new Recipient(externalId, randomPhoneNumber(), randomEDD(), slotName,
-                        randomActiveRecipient());
-                recipientDataService.create(recipient);
-                if (i>0 && i%100==0) {
-                    millis = System.currentTimeMillis() - milliStart;
-                    rate = (float) i * MILLIS_PER_SECOND / millis;
-                    logger.info(String.format("Created %d/%d recipients for %s (%s/sec)", i, count, slotName, rate));
-                }
+        if (!dayList.contains(day)) {
+            return String.format("%s is not a valid day. Valid days: %s", day, dayList);
+        }
+
+        logger.info("Creating {} recipient{}...", count, count == 1 ? "" : "s");
+        long millis, milliStart = System.currentTimeMillis();
+        float rate;
+        for (int i = 0; i < count; i++) {
+            Recipient recipient = new Recipient(randomPhoneNumber(), randomEDD(), slot, day, isActive);
+            recipientDataService.create(recipient);
+            if (i>0 && i%100==0) {
+                millis = System.currentTimeMillis() - milliStart;
+                rate = (float) i * MILLIS_PER_SECOND / millis;
+                logger.info(String.format("Created %d/%d recipients for %s/%s (%s/sec)", i, count, slot, day,
+                        rate));
             }
-            millis = System.currentTimeMillis() - milliStart;
-            rate = (float) count * MILLIS_PER_SECOND / millis;
-            logger.error(String.format("Created %d recipient%s for %s in %dms (%s/sec)", count, count == 1 ? "" : "s",
-                    slotName, millis, rate));
         }
-        return String.format("%s:%d", slotName, count);
+        millis = System.currentTimeMillis() - milliStart;
+        rate = (float) count * MILLIS_PER_SECOND / millis;
+        logger.info(String.format("Created %d %s recipient%s for %s/%s in %dms (%s/sec)", count,
+                isActive ? "active" : "inactive", count == 1 ? "" : "s", slot, day, millis, rate));
+
+        return String.format("%s/%s/%s: %d", slot, day, isActive ? "active" : "inactive", count);
     }
 
 
-    public String createCampaign(String dateOrPeriod, int slot) {
-        if (slot < 1 || slot > slotList.size()) {
-            return String.format("### INVALID SLOT ### Slot number must be between 1 and %d", slotList.size());
+    private void setExpectations(int count) {
+        logger.info("Setting expectations to {}", count);
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.set(REDIS_EXPECTATIONS, String.valueOf(count));
+            jedis.set(REDIS_EXPECTING, String.valueOf(count));
+            logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
         }
-        String slotName = slotList.get(slot-1);
+    }
+
+
+    public String createCampaign(String dateOrPeriod, String slot, String day) {
+        if (!slotList.contains(slot)) {
+            return String.format("%s is not a valid slot. Valid slots: %s", slot, slotList);
+        }
+        if (!dayList.contains(day)) {
+            return String.format("%s is not a valid day. Valid days: %s", day, dayList);
+        }
 
         try (Jedis jedis = jedisPool.getResource()) {
             LocalDate date;
@@ -317,16 +342,17 @@ public class Kil2ServiceImpl implements Kil2Service {
 
             campaign.setMessages(Arrays.asList(firstMessage, lastMessage));
             messageCampaignService.saveCampaign(campaign);
-            logger.error(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
+            logger.info(String.format("Absolute campaign %s: %s %s", campaignName, date.toString(), time));
 
-            logger.error(String.format("Enrolling %s in %s", campaignName, slotName));
-            CampaignRequest campaignRequest = new CampaignRequest(slotName, campaignName, LocalDate.now(), null);
+            logger.info(String.format("Enrolling %s in %s/%s", campaignName, slot, day));
+            CampaignRequest campaignRequest = new CampaignRequest(externalIDFromSlotDay(slot, day), campaignName,
+                    LocalDate.now(), null);
             messageCampaignService.enroll(campaignRequest);
 
-            int slotRecipientCount = (int)recipientDataService.countFindBySlot(slotName);
+            int slotRecipientCount = (int)recipientDataService.countFindByActiveSlotDay(slot, day, true);
             setExpectations(slotRecipientCount);
-            return String.format("%s @ %s %s > %s (%d recipient%s)", campaignName, date.toString(), time, slotName,
-                    slotRecipientCount, slotRecipientCount == 1 ? "" : "s");
+            return String.format("%s @ %s %s > %s/%s (%d recipient%s)", campaignName, date.toString(), time, slot,
+                    day, slotRecipientCount, slotRecipientCount == 1 ? "" : "s");
         }
     }
 
@@ -353,29 +379,38 @@ public class Kil2ServiceImpl implements Kil2Service {
                 long millis = milliStop - milliStart;
                 long expectations = Long.valueOf(jedis.get(REDIS_EXPECTATIONS));
                 float rate = (float) Long.valueOf(jedis.get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
-                logger.error("Measured {} calls at {} calls/second", expectations, rate);
+                logger.info("Measured {} calls at {} calls/second", expectations, rate);
                 resetExpectations();
+            } else if (expecting % 500 == 0) {
+                logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
             }
         }
     }
 
 
-    public String setExpectations(int count) {
-        logger.debug("Setting expectations to {}", count);
-
+    public String getStatus() {
+        StringBuilder sb = new StringBuilder();
         try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(REDIS_EXPECTATIONS, String.valueOf(count));
-            jedis.set(REDIS_EXPECTING, String.valueOf(count));
-            logger.error("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
-            return String.valueOf(count);
+            sb.append(String.format("Expectations: %s/%s", jedis.get(REDIS_EXPECTING), jedis.get
+                    (REDIS_EXPECTATIONS)));
         }
-    }
 
+        int recipientCount = (int)recipientDataService.count();
+        sb.append(String.format("\n\rRecipients: %d", recipientCount));
 
-    public String getExpectations() {
-        try (Jedis jedis = jedisPool.getResource()) {
-            return String.format("%s/%s", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
+        List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
+        sb.append("\n\rCampaigns: ");
+        boolean first = true;
+        for (CampaignRecord campaign : campaigns) {
+            String campaignName = campaign.getName();
+            sb.append(String.format("%s%s", first ? "" : ", ", campaignName));
+            if (first) first = false;
         }
+        if (first) {
+            sb.append("none");
+        }
+
+        return sb.toString();
     }
 
 
@@ -384,7 +419,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             jedis.set(REDIS_EXPECTING, "0");
             jedis.set(REDIS_EXPECTATIONS, "0");
             jedis.del(REDIS_TIMESTAMP);
-            logger.error("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
+            logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
             return "OK";
         }
     }

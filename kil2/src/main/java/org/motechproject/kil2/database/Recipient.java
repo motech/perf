@@ -2,18 +2,13 @@ package org.motechproject.kil2.database;
 
 import org.motechproject.mds.annotations.Entity;
 import org.motechproject.mds.annotations.Field;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import javax.jdo.annotations.Column;
 import javax.jdo.annotations.Index;
 
 @Entity
+@Index(name="ACTIVE_SLOT_DAY", members={"slot","day","isActive"})
 public class Recipient {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(Recipient.class);
-
-    @Field
-    private String externalId;
 
     @Field
     private String phoneNumber;
@@ -22,19 +17,16 @@ public class Recipient {
     private String expectedDeliveryDate;
 
     @Field
-    @Index
+    @Column(name="slot", jdbcType="VARCHAR", length=2)
     private String slot;
+
+    @Field
+    @Column(name="day", jdbcType="VARCHAR", length=1)
+    private String day;
 
     @Field
     private Boolean isActive;
 
-    public String getExternalId() {
-        return externalId;
-    }
-
-    public void setExternalId(String externalId) {
-        this.externalId = externalId;
-    }
 
     public String getPhoneNumber() {
         return phoneNumber;
@@ -68,13 +60,11 @@ public class Recipient {
         this.isActive = isActive;
     }
 
-    public Recipient(String externalId, String phoneNumber, String expectedDeliveryDate, String slot, Boolean
-            isActive) {
-
-        this.externalId = externalId;
+    public Recipient(String phoneNumber, String expectedDeliveryDate, String slot, String day, Boolean isActive) {
         this.phoneNumber = phoneNumber;
         this.expectedDeliveryDate = expectedDeliveryDate;
         this.slot = slot;
+        this.day = day;
         this.isActive = isActive;
     }
 
@@ -89,13 +79,10 @@ public class Recipient {
 
         Recipient recipient = (Recipient) o;
 
-        if (!slot.equals(recipient.slot)) {
+        if (!day.equals(recipient.day)) {
             return false;
         }
         if (!expectedDeliveryDate.equals(recipient.expectedDeliveryDate)) {
-            return false;
-        }
-        if (!externalId.equals(recipient.externalId)) {
             return false;
         }
         if (!isActive.equals(recipient.isActive)) {
@@ -104,16 +91,19 @@ public class Recipient {
         if (!phoneNumber.equals(recipient.phoneNumber)) {
             return false;
         }
+        if (!slot.equals(recipient.slot)) {
+            return false;
+        }
 
         return true;
     }
 
     @Override
     public int hashCode() {
-        int result = externalId.hashCode();
-        result = 31 * result + phoneNumber.hashCode();
+        int result = phoneNumber.hashCode();
         result = 31 * result + expectedDeliveryDate.hashCode();
         result = 31 * result + slot.hashCode();
+        result = 31 * result + day.hashCode();
         result = 31 * result + isActive.hashCode();
         return result;
     }
@@ -121,10 +111,10 @@ public class Recipient {
     @Override
     public String toString() {
         return "Recipient{" +
-                "externalId='" + externalId + '\'' +
-                ", phoneNumber='" + phoneNumber + '\'' +
+                "phoneNumber='" + phoneNumber + '\'' +
                 ", expectedDeliveryDate='" + expectedDeliveryDate + '\'' +
                 ", slot='" + slot + '\'' +
+                ", day='" + day + '\'' +
                 ", isActive=" + isActive +
                 '}';
     }

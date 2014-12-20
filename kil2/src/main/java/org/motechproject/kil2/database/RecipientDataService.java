@@ -7,11 +7,15 @@ import org.motechproject.mds.service.MotechDataService;
 import java.util.List;
 
 public interface RecipientDataService extends MotechDataService<Recipient> {
-    @Lookup
-    Recipient findByExternalId(@LookupField(name = "externalId") String externalId);
 
     @Lookup
-    List<Recipient> findBySlot(@LookupField(name = "slot") String slot);
+    List<Recipient> findByActiveSlotDay(
+            @LookupField(name = "slot") String slot,
+            @LookupField(name = "day") String day,
+            @LookupField(name = "isActive") Boolean isActive);
 
-    long countFindBySlot(@LookupField(name = "slot") String slot);
+    long countFindByActiveSlotDay(
+            @LookupField(name = "slot") String slot,
+            @LookupField(name = "day") String day,
+            @LookupField(name = "isActive") Boolean isActive);
 }

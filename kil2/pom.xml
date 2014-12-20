@@ -7,7 +7,7 @@
     <version>0.1.0</version>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>kil2</artifactId>
-    <name>Mock Kilkari 2 Module</name>
+    <name>Kil2</name>
     <packaging>bundle</packaging>
 
     <properties>
