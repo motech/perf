@@ -78,25 +78,6 @@ public class Kil2Controller {
 
 
     /*
-     * /create-recipients/{slot}/{day}/{active}/{count}
-     *
-     * {slot}: slot
-     * {day}: day
-     * {active}: active status
-     * {count}: number of recipients
-     *
-     */
-    @ResponseStatus(HttpStatus.OK)
-    @ResponseBody
-    @RequestMapping(value = "/create-recipients/{slot}/{day}/{active}/{count}")
-    public String createRecipients(@PathVariable String slot, @PathVariable String day, @PathVariable Boolean active,
-                                   @PathVariable int count) {
-        return kil2Service.createRecipients(slot, day, active, count);
-    }
-
-
-
-    /*
      * /status
      *
      *
@@ -137,21 +118,6 @@ public class Kil2Controller {
     @RequestMapping(value = "/reset-expectations")
     public String deleteExpectations() {
         return kil2Service.resetExpectations();
-    }
-
-
-    /*
-     * /delete-recipients
-     *
-     * removes all recipients
-     * returns 'OK'
-     *
-     */
-    @ResponseStatus(HttpStatus.OK)
-    @ResponseBody
-    @RequestMapping(value = "/delete-recipients")
-    public String deleteRecipients() {
-        return kil2Service.deleteRecipients();
     }
 
 

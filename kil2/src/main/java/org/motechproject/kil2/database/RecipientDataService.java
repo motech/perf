@@ -9,13 +9,13 @@ import java.util.List;
 public interface RecipientDataService extends MotechDataService<Recipient> {
 
     @Lookup
-    List<Recipient> findByActiveSlotDay(
+    List<Recipient> findBySlotDayStatus(
             @LookupField(name = "slot") String slot,
             @LookupField(name = "day") String day,
-            @LookupField(name = "isActive") Boolean isActive);
+            @LookupField(name = "status") Status status);
 
-    long countFindByActiveSlotDay(
+    long countFindBySlotDayStatus(
             @LookupField(name = "slot") String slot,
             @LookupField(name = "day") String day,
-            @LookupField(name = "isActive") Boolean isActive);
+            @LookupField(name = "status") Status status);
 }

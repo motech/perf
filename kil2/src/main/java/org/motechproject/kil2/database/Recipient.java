@@ -7,7 +7,7 @@ import javax.jdo.annotations.Column;
 import javax.jdo.annotations.Index;
 
 @Entity
-@Index(name="ACTIVE_SLOT_DAY", members={"slot","day","isActive"})
+@Index(name="ACTIVE_SLOT_DAY", members={"slot","day","status"})
 public class Recipient {
 
     @Field
@@ -25,7 +25,7 @@ public class Recipient {
     private String day;
 
     @Field
-    private Boolean isActive;
+    private Status status;
 
 
     public String getPhoneNumber() {
@@ -52,20 +52,20 @@ public class Recipient {
         this.slot = slot;
     }
 
-    public Boolean getIsActive() {
-        return isActive;
+    public Status getStatus() {
+        return status;
     }
 
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
+    public void setStatus(Status status) {
+        this.status = this.status;
     }
 
-    public Recipient(String phoneNumber, String expectedDeliveryDate, String slot, String day, Boolean isActive) {
+    public Recipient(String phoneNumber, String expectedDeliveryDate, String slot, String day, Status status) {
         this.phoneNumber = phoneNumber;
         this.expectedDeliveryDate = expectedDeliveryDate;
         this.slot = slot;
         this.day = day;
-        this.isActive = isActive;
+        this.status = status;
     }
 
     @Override
@@ -85,7 +85,7 @@ public class Recipient {
         if (!expectedDeliveryDate.equals(recipient.expectedDeliveryDate)) {
             return false;
         }
-        if (!isActive.equals(recipient.isActive)) {
+        if (!status.equals(recipient.status)) {
             return false;
         }
         if (!phoneNumber.equals(recipient.phoneNumber)) {
@@ -104,7 +104,7 @@ public class Recipient {
         result = 31 * result + expectedDeliveryDate.hashCode();
         result = 31 * result + slot.hashCode();
         result = 31 * result + day.hashCode();
-        result = 31 * result + isActive.hashCode();
+        result = 31 * result + status.hashCode();
         return result;
     }
 
@@ -115,7 +115,7 @@ public class Recipient {
                 ", expectedDeliveryDate='" + expectedDeliveryDate + '\'' +
                 ", slot='" + slot + '\'' +
                 ", day='" + day + '\'' +
-                ", isActive=" + isActive +
+                ", status=" + status +
                 '}';
     }
 }
