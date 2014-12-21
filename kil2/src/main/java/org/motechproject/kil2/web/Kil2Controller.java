@@ -115,9 +115,9 @@ public class Kil2Controller {
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/reset-expectations")
-    public String deleteExpectations() {
-        return kil2Service.resetExpectations();
+    @RequestMapping(value = "/reset")
+    public String reset() {
+        return kil2Service.reset();
     }
 
 

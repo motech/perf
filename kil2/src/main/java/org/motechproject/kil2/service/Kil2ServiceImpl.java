@@ -11,6 +11,7 @@ import org.motechproject.ivr.service.OutboundCallService;
 import org.motechproject.kil2.database.Recipient;
 import org.motechproject.kil2.database.RecipientDataService;
 import org.motechproject.kil2.database.Status;
+import org.motechproject.mds.query.SqlQueryExecution;
 import org.motechproject.messagecampaign.EventKeys;
 import org.motechproject.messagecampaign.contract.CampaignRequest;
 import org.motechproject.messagecampaign.domain.campaign.CampaignType;
@@ -28,6 +29,7 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+import javax.jdo.Query;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
@@ -41,8 +43,6 @@ import java.util.Random;
 public class Kil2ServiceImpl implements Kil2Service {
 
     private final static String REDIS_SERVER_PROPERTY = "kil2.redis_server";
-    private final static String SLOTS_PROPERTY = "kil2.slots";
-    private final static String DAYS_PROPERTY = "kil2.days";
 
     private static final String CALL_EVENT = "org.motechproject.kil2.call";
 
@@ -83,15 +83,30 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
+    private List<String> readList(String what) {
+
+        final String field = what;
+
+        List<String> slots = (List<String>) recipientDataService.executeSQLQuery(new SqlQueryExecution<List<String>>() {
+            @Override
+            public List<String> execute(Query query) {
+                return (List<String>) query.execute();
+            }
+
+            @Override
+            public String getSqlQuery() {
+                    return String.format("SELECT DISTINCT %s FROM KIL2_RECIPIENT", field);
+            }
+        });
+
+        return slots;
+    }
+
+
     private void setupData() {
 
         redisServer = settingsFacade.getProperty(REDIS_SERVER_PROPERTY);
-        slotList = Arrays.asList(settingsFacade.getProperty(SLOTS_PROPERTY).split("\\s*,\\s*"));
-        dayList = Arrays.asList(settingsFacade.getProperty(DAYS_PROPERTY).split("\\s*,\\s*"));
-
         logger.info("redis server: {}", redisServer);
-        logger.info("slot list: {}", slotList);
-        logger.info("day list: {}", dayList);
 
         rand = new Random();
 
@@ -104,7 +119,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             throw new RuntimeException("Could not get instance host name: " + e.toString(), e);
         }
 
-        resetExpectations();
+        reset();
 
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.setnx(REDIS_CAMPAIGN_ID, "0");
@@ -322,7 +337,7 @@ public class Kil2ServiceImpl implements Kil2Service {
                 long expectations = Long.valueOf(jedis.get(REDIS_EXPECTATIONS));
                 float rate = (float) Long.valueOf(jedis.get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
                 logger.info("Measured {} calls at {} calls/second", expectations, rate);
-                resetExpectations();
+                reset();
             } else if (expecting % 500 == 0) {
                 logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
             }
@@ -356,7 +371,16 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    public String resetExpectations() {
+    public String reset() {
+
+        slotList = readList("slot");
+        dayList = readList("day");
+        if (slotList.size() == 0) {
+            logger.error("No recipients in the database!!!");
+        }
+        logger.info("slot list: {}", slotList);
+        logger.info("day list: {}", dayList);
+
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.set(REDIS_EXPECTING, "0");
             jedis.set(REDIS_EXPECTATIONS, "0");
