@@ -70,9 +70,25 @@ public class Kil2Controller {
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
     @RequestMapping(value = "/create-campaign/{slot}/{day}/{dateOrPeriod}")
+    public String createSlotDayCampaign(@PathVariable String dateOrPeriod, @PathVariable String slot,
+                                 @PathVariable String day) {
+        return kil2Service.createCampaign(dateOrPeriod);
+    }
+
+
+
+    /*
+     * /create-campaign/{dateOrPeriod}
+     *
+     * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/create-slot-campaign/{slot}/{day}/{dateOrPeriod}")
     public String createCampaign(@PathVariable String dateOrPeriod, @PathVariable String slot,
                                  @PathVariable String day) {
-        return kil2Service.createCampaign(dateOrPeriod, slot, day);
+        return kil2Service.createSlotCampaign(dateOrPeriod, slot, day);
     }
 
 
