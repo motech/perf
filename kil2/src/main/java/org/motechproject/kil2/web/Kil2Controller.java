@@ -60,35 +60,17 @@ public class Kil2Controller {
 
 
     /*
-     * /create-campaign/{slot}/{day}/{dateOrPeriod}
-     *
-     * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
-     * {slot}: slot
-     * {day}: day
-     *
-     */
-    @ResponseStatus(HttpStatus.OK)
-    @ResponseBody
-    @RequestMapping(value = "/create-campaign/{slot}/{day}/{dateOrPeriod}")
-    public String createSlotDayCampaign(@PathVariable String dateOrPeriod, @PathVariable String slot,
-                                 @PathVariable String day) {
-        return kil2Service.createCampaign(dateOrPeriod);
-    }
-
-
-
-    /*
-     * /create-campaign/{dateOrPeriod}
+     * /create-campaign/{day}/{slot}/{dateOrPeriod}
      *
      * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-slot-campaign/{slot}/{day}/{dateOrPeriod}")
-    public String createCampaign(@PathVariable String dateOrPeriod, @PathVariable String slot,
-                                 @PathVariable String day) {
-        return kil2Service.createSlotCampaign(dateOrPeriod, slot, day);
+    @RequestMapping(value = "/create-campaign/{day}/{slot}/{dateOrPeriod}")
+    public String createCampaign(@PathVariable String dateOrPeriod, @PathVariable String day,
+                                 @PathVariable String slot) {
+        return kil2Service.createDaySlotCampaign(dateOrPeriod, day, slot);
     }
 
 

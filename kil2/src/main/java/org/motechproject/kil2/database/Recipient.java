@@ -7,33 +7,35 @@ import javax.jdo.annotations.Column;
 import javax.jdo.annotations.Index;
 
 @Entity
-@Index(name="ACTIVE_SLOT_DAY", members={"slot","day","status"})
+@Index(name="ACTIVE_SLOT_DAY", members={"day", "slot", "status"})
 public class Recipient {
-
-    @Field
-    private String phoneNumber;
-
-    @Field
-    private String expectedDeliveryDate;
-
-    @Field
-    @Column(name="slot", jdbcType="VARCHAR", length=2)
-    private String slot;
 
     @Field
     @Column(name="day", jdbcType="VARCHAR", length=1)
     private String day;
 
     @Field
+    @Column(name="slot", jdbcType="VARCHAR", length=2)
+    private String slot;
+
+    @Field
+    @Column(name="status", jdbcType="VARCHAR", length=9)
     private Status status;
 
+    @Field
+    @Column(name="phone", jdbcType="VARCHAR", length=10)
+    private String phone;
 
-    public String getPhoneNumber() {
-        return phoneNumber;
+    @Field
+    @Column(name="expectedDeliveryDate", jdbcType="VARCHAR", length=2)
+    private String expectedDeliveryDate;
+
+    public String getPhone() {
+        return phone;
     }
 
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 
     public String getExpectedDeliveryDate() {
@@ -60,8 +62,8 @@ public class Recipient {
         this.status = this.status;
     }
 
-    public Recipient(String phoneNumber, String expectedDeliveryDate, String slot, String day, Status status) {
-        this.phoneNumber = phoneNumber;
+    public Recipient(String phone, String expectedDeliveryDate, String slot, String day, Status status) {
+        this.phone = phone;
         this.expectedDeliveryDate = expectedDeliveryDate;
         this.slot = slot;
         this.day = day;
@@ -88,7 +90,7 @@ public class Recipient {
         if (!status.equals(recipient.status)) {
             return false;
         }
-        if (!phoneNumber.equals(recipient.phoneNumber)) {
+        if (!phone.equals(recipient.phone)) {
             return false;
         }
         if (!slot.equals(recipient.slot)) {
@@ -100,7 +102,7 @@ public class Recipient {
 
     @Override
     public int hashCode() {
-        int result = phoneNumber.hashCode();
+        int result = phone.hashCode();
         result = 31 * result + expectedDeliveryDate.hashCode();
         result = 31 * result + slot.hashCode();
         result = 31 * result + day.hashCode();
@@ -111,7 +113,7 @@ public class Recipient {
     @Override
     public String toString() {
         return "Recipient{" +
-                "phoneNumber='" + phoneNumber + '\'' +
+                "phone='" + phone + '\'' +
                 ", expectedDeliveryDate='" + expectedDeliveryDate + '\'' +
                 ", slot='" + slot + '\'' +
                 ", day='" + day + '\'' +

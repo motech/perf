@@ -5,7 +5,7 @@ import datetime
 import random
 import sys
 
-# (id, creationDate,          creator, day, expectedDeliveryDate, status,      modificationDate,      modifiedBy, owner, phoneNumber,   slot)
+# (id, creationDate,          creator, day, expectedDeliveryDate, status,      modificationDate,      modifiedBy, owner, phone,        slot)
 # (1,  '2014-12-24 23:59:59', '',      '3', '2015-08-12',         'Cancelled', '2014-12-24 23:59:59', '',         '',    '8971536979', '2m'),
 #
 def make_line_printer (suffix): return lambda id, day, edd, status, phone, slot: \
@@ -71,6 +71,6 @@ if __name__ == '__main__':
         f.write('TRUNCATE TABLE KIL2_RECIPIENT;\n')
     id = args.start
     for i in range(args.multiplier):
-        f.write('LOCK TABLES KIL2_RECIPIENT WRITE;\nINSERT INTO KIL2_RECIPIENT (id,creationDate,creator,day,expectedDeliveryDate,status,modificationDate,modifiedBy,owner,phoneNumber,slot) VALUES\n')
+        f.write('LOCK TABLES KIL2_RECIPIENT WRITE;\nINSERT INTO KIL2_RECIPIENT (id,creationDate,creator,day,expectedDeliveryDate,status,modificationDate,modifiedBy,owner,phone,slot) VALUES\n')
         id = write_recipients(id, f)
         f.write('UNLOCK TABLES;\n')

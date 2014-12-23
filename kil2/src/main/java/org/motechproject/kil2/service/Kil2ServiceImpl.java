@@ -8,9 +8,7 @@ import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
 import org.motechproject.ivr.service.OutboundCallService;
-import org.motechproject.kil2.database.Recipient;
-import org.motechproject.kil2.database.RecipientDataService;
-import org.motechproject.kil2.database.Status;
+import org.motechproject.kil2.database.*;
 import org.motechproject.mds.query.SqlQueryExecution;
 import org.motechproject.messagecampaign.EventKeys;
 import org.motechproject.messagecampaign.contract.CampaignRequest;
@@ -60,6 +58,7 @@ public class Kil2ServiceImpl implements Kil2Service {
     private MessageCampaignService messageCampaignService;
     private OutboundCallService outboundCallService;
     private RecipientDataService recipientDataService;
+    private CampaignDataService campaignDataService;
     private MotechSchedulerService schedulerService;
     private String redisServer;
     private List<String> slotList;
@@ -72,12 +71,14 @@ public class Kil2ServiceImpl implements Kil2Service {
     @Autowired
     public Kil2ServiceImpl(@Qualifier("kil2Settings") SettingsFacade settingsFacade, EventRelay eventRelay,
                            MessageCampaignService messageCampaignService, OutboundCallService outboundCallService,
-                           RecipientDataService recipientDataService, MotechSchedulerService schedulerService) {
+                           RecipientDataService recipientDataService, CampaignDataService campaignDataService,
+                           MotechSchedulerService schedulerService) {
         this.settingsFacade = settingsFacade;
         this.eventRelay = eventRelay;
         this.messageCampaignService = messageCampaignService;
         this.outboundCallService = outboundCallService;
         this.recipientDataService = recipientDataService;
+        this.campaignDataService = campaignDataService;
         this.schedulerService = schedulerService;
         setupData();
     }
@@ -127,32 +128,6 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    public String deleteCampaigns() {
-        logger.info("Delete campaigns...");
-        long milliStart = System.currentTimeMillis();
-
-        schedulerService.safeUnscheduleAllJobs("org.motechproject.messagecampaign");
-
-        List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
-        for (CampaignRecord campaign : campaigns) {
-            String campaignName = campaign.getName();
-            logger.info("Deleting {}...", campaignName);
-            long milliStart2 = System.currentTimeMillis();
-            messageCampaignService.deleteCampaign(campaignName);
-            logger.info("Deleted {} in {}ms", campaignName, System.currentTimeMillis() - milliStart2);
-        }
-
-        logger.info("Deleted in {}ms", System.currentTimeMillis() - milliStart);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(REDIS_CAMPAIGN_ID, "0");
-        }
-
-
-        return "OK";
-    }
-
-
     private void sendCallMessage(String phoneNumber) {
         Map<String, Object> eventParams = new HashMap<>();
         eventParams.put("to", phoneNumber);
@@ -161,35 +136,15 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    private String slotFromExternalID(String externalID) {
-        return externalID.substring(0, 2);
-    }
-
-
-    private String dayFromExternalID(String externalID) {
-        return externalID.substring(2, 3);
-    }
-
-
-    private String externalIDFromSlotDay(String slot, String day) {
-        return slot+day;
-    }
-
-
     @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
-    public void handleCampaignMessageEvent(MotechEvent event) {
+    public void handleCampaignEvent(MotechEvent event) {
         logger.info(event.toString());
 
         List<Recipient> recipients;
         String externalID = (String)event.getParameters().get("ExternalID");
         long milliStart = System.currentTimeMillis();
-        if ("###".equals(externalID)) {
-            recipients = recipientDataService.retrieveAll();
-        } else {
-            String slot = slotFromExternalID(externalID);
-            String day = dayFromExternalID(externalID);
-            recipients = recipientDataService.findBySlotDayStatus(slot, day, Status.Active);
-        }
+        Campaign campaign = campaignDataService.findById(Long.parseLong(externalID));
+        recipients = recipientDataService.findBySlotDayStatus(campaign.getSlot(), campaign.getDay(), Status.Active);
         long millis = System.currentTimeMillis() - milliStart;
         float rate = (float) recipients.size() * MILLIS_PER_SECOND / millis;
         logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", recipients.size(),
@@ -198,7 +153,7 @@ public class Kil2ServiceImpl implements Kil2Service {
         int count = 0;
         milliStart = System.currentTimeMillis();
         for(Recipient recipient : recipients) {
-            sendCallMessage(recipient.getPhoneNumber());
+            sendCallMessage(recipient.getPhone());
             count++;
             if (count % 1000 == 0) {
                 logger.info("Sent {} messages", count);
@@ -260,64 +215,21 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    public String createCampaign(String dateOrPeriod) {
-        try (Jedis jedis = jedisPool.getResource()) {
-            LocalDate date;
-            String time;
-            if (dateOrPeriod.matches(DATE_TIME_REGEX)) {
-                date = extractDate(dateOrPeriod);
-                time = extractTime(dateOrPeriod);
-            }
-            else if (dateOrPeriod.matches(DURATION_REGEX)) {
-                Period period = new JodaFormatter().parsePeriod(fixPeriod(dateOrPeriod));
-                DateTime now = DateTime.now().plus(period.toPeriod());
-                date = now.toLocalDate();
-                time = String.format("%02d:%02d", now.getHourOfDay(), now.getMinuteOfHour());
-            }
-            else {
-                throw new IllegalStateException(String.format("%s seems to be neither a datetime or a duration.",
-                        dateOrPeriod));
-            }
-
-            CampaignRecord campaign = new CampaignRecord();
-            String campaignName = String.format("Campaign%s", jedis.incr(REDIS_CAMPAIGN_ID));
-            campaign.setName(campaignName);
-            campaign.setCampaignType(CampaignType.ABSOLUTE);
-
-            CampaignMessageRecord firstMessage = new CampaignMessageRecord();
-            firstMessage.setName("firstMessage");
-            firstMessage.setDate(date);
-            firstMessage.setStartTime(time);
-            firstMessage.setMessageKey("first");
-
-            CampaignMessageRecord lastMessage = new CampaignMessageRecord();
-            lastMessage.setName("lastMessage");
-            lastMessage.setDate(date.plusYears(1));
-            lastMessage.setStartTime(time);
-            lastMessage.setMessageKey("last");
-
-            campaign.setMessages(Arrays.asList(firstMessage, lastMessage));
-            messageCampaignService.saveCampaign(campaign);
-
-            int recipientCount = (int)recipientDataService.count();
-            String msg = String.format("Enrolling %s with %d recipient%s %s %s", campaignName, recipientCount,
-                    recipientCount == 1 ? "" : "s", date.toString(), time);
-            logger.info(msg);
-            CampaignRequest campaignRequest = new CampaignRequest("###", campaignName, LocalDate.now(), null);
-            messageCampaignService.enroll(campaignRequest);
-
-            setExpectations(recipientCount);
-            return msg;
-        }
+    private String createCampaign(String day, String slot) {
+        Campaign campaign = new Campaign(day, slot);
+        campaignDataService.create(campaign);
+        String id =campaignDataService.getDetachedField(campaign, "id").toString();
+        logger.info("Created campaign {}: {}", id, campaign);
+        return id;
     }
 
 
-    public String createSlotCampaign(String dateOrPeriod, String slot, String day) {
-        if (!slotList.contains(slot)) {
-            return String.format("%s is not a valid slot. Valid slots: %s", slot, slotList);
-        }
+    public String createDaySlotCampaign(String dateOrPeriod, String day, String slot) {
         if (!dayList.contains(day)) {
             return String.format("%s is not a valid day. Valid days: %s", day, dayList);
+        }
+        if (!slotList.contains(slot)) {
+            return String.format("%s is not a valid slot. Valid slots: %s", slot, slotList);
         }
 
         try (Jedis jedis = jedisPool.getResource()) {
@@ -338,37 +250,59 @@ public class Kil2ServiceImpl implements Kil2Service {
                         dateOrPeriod));
             }
 
-            CampaignRecord campaign = new CampaignRecord();
+            CampaignRecord campaignRecord = new CampaignRecord();
             String campaignName = String.format("Campaign%s", jedis.incr(REDIS_CAMPAIGN_ID));
-            campaign.setName(campaignName);
-            campaign.setCampaignType(CampaignType.ABSOLUTE);
+            campaignRecord.setName(campaignName);
+            campaignRecord.setCampaignType(CampaignType.ABSOLUTE);
 
+            //todo: create 9 months campaigns...
             CampaignMessageRecord firstMessage = new CampaignMessageRecord();
             firstMessage.setName("firstMessage");
             firstMessage.setDate(date);
             firstMessage.setStartTime(time);
             firstMessage.setMessageKey("first");
 
-            CampaignMessageRecord lastMessage = new CampaignMessageRecord();
-            lastMessage.setName("lastMessage");
-            lastMessage.setDate(date.plusYears(1));
-            lastMessage.setStartTime(time);
-            lastMessage.setMessageKey("last");
+            campaignRecord.setMessages(Arrays.asList(firstMessage));
+            messageCampaignService.saveCampaign(campaignRecord);
 
-            campaign.setMessages(Arrays.asList(firstMessage, lastMessage));
-            messageCampaignService.saveCampaign(campaign);
 
             int slotRecipientCount = (int)recipientDataService.countFindBySlotDayStatus(slot, day, Status.Active);
             String msg = String.format("Enrolling %s with %d recipient%s in %s/%s @ %s %s", campaignName,
                     slotRecipientCount, slotRecipientCount == 1 ? "" : "s", slot, day, date.toString(), time);
             logger.info(msg);
-            CampaignRequest campaignRequest = new CampaignRequest(externalIDFromSlotDay(slot, day), campaignName,
-                    LocalDate.now(), null);
+            String externalID = createCampaign(day, slot);
+            CampaignRequest campaignRequest = new CampaignRequest(externalID, campaignName, LocalDate.now(), null);
             messageCampaignService.enroll(campaignRequest);
 
             setExpectations(slotRecipientCount);
             return msg;
         }
+    }
+
+
+    public String deleteCampaigns() {
+        logger.info("Delete campaigns...");
+        long milliStart = System.currentTimeMillis();
+
+        schedulerService.safeUnscheduleAllJobs("org.motechproject.messagecampaign");
+
+        List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
+        for (CampaignRecord campaign : campaigns) {
+            String campaignName = campaign.getName();
+            logger.info("Deleting {}...", campaignName);
+            long milliStart2 = System.currentTimeMillis();
+            messageCampaignService.deleteCampaign(campaignName);
+            logger.info("Deleted {} in {}ms", campaignName, System.currentTimeMillis() - milliStart2);
+        }
+
+        logger.info("Deleted in {}ms", System.currentTimeMillis() - milliStart);
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.set(REDIS_CAMPAIGN_ID, "0");
+        }
+
+
+        return "OK";
     }
 
 
