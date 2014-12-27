@@ -82,11 +82,14 @@ def mock_outbound():
     errors = []
     if 'to' not in request.args:
         errors.append("missing 'to' argument")
+    if 'externalID' not in request.args:
+        errors.append("missing 'externalID' argument")
     if len(errors) > 0:
         return render_template('400.html', errors=errors), 400
 
     payload = {
         'to': request.args['to'],
+        'externalID': request.args['externalID'],
     }
     outgoing_queue_machine.put(payload)
 

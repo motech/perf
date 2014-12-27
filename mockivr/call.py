@@ -15,10 +15,10 @@ class CallType:
     def random_call_duration(self):
         return random.randrange(self.min_duration, self.max_duration)
 
-SUCCESS = CallType("ANSWERED", 40, 100*1000, 140*1000)
-NO_ANSWER = CallType("NO_ANSWER", 30, 10*1000, 30*1000)
-PHONE_OFF = CallType("BUSY", 15, 1000/2, 2*1000)
-NOT_DELIVERED = CallType("FAILED", 15, 1000/2, 1*1000)
+SUCCESS = CallType("OK", 40, 100*1000, 140*1000)
+NO_ANSWER = CallType("NA", 30, 10*1000, 30*1000)
+PHONE_OFF = CallType("SO", 15, 1000/2, 2*1000)
+NOT_DELIVERED = CallType("ND", 15, 1000/2, 1*1000)
 
 class CallMachine:
 

@@ -57,7 +57,7 @@ public class Kil2ServiceImpl implements Kil2Service {
     private EventRelay eventRelay;
     private MessageCampaignService messageCampaignService;
     private OutboundCallService outboundCallService;
-    private RecipientDataService recipientDataService;
+    private CallDataService callDataService;
     private CampaignDataService campaignDataService;
     private MotechSchedulerService schedulerService;
     private String redisServer;
@@ -71,13 +71,13 @@ public class Kil2ServiceImpl implements Kil2Service {
     @Autowired
     public Kil2ServiceImpl(@Qualifier("kil2Settings") SettingsFacade settingsFacade, EventRelay eventRelay,
                            MessageCampaignService messageCampaignService, OutboundCallService outboundCallService,
-                           RecipientDataService recipientDataService, CampaignDataService campaignDataService,
+                           CallDataService callDataService, CampaignDataService campaignDataService,
                            MotechSchedulerService schedulerService) {
         this.settingsFacade = settingsFacade;
         this.eventRelay = eventRelay;
         this.messageCampaignService = messageCampaignService;
         this.outboundCallService = outboundCallService;
-        this.recipientDataService = recipientDataService;
+        this.callDataService = callDataService;
         this.campaignDataService = campaignDataService;
         this.schedulerService = schedulerService;
         setupData();
@@ -88,7 +88,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
         final String field = what;
 
-        List<String> slots = (List<String>) recipientDataService.executeSQLQuery(new SqlQueryExecution<List<String>>() {
+        List<String> slots = (List<String>) callDataService.executeSQLQuery(new SqlQueryExecution<List<String>>() {
             @Override
             public List<String> execute(Query query) {
                 return (List<String>) query.execute();
@@ -96,7 +96,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
             @Override
             public String getSqlQuery() {
-                    return String.format("SELECT DISTINCT %s FROM KIL2_RECIPIENT", field);
+                    return String.format("SELECT DISTINCT %s FROM KIL2_CALL", field);
             }
         });
 
@@ -128,8 +128,9 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    private void sendCallMessage(String phoneNumber) {
+    private void sendCallMessage(String recipientID, String phoneNumber) {
         Map<String, Object> eventParams = new HashMap<>();
+        eventParams.put("externalID", recipientID);
         eventParams.put("to", phoneNumber);
         MotechEvent event = new MotechEvent(CALL_EVENT, eventParams);
         eventRelay.sendEventMessage(event);
@@ -140,20 +141,21 @@ public class Kil2ServiceImpl implements Kil2Service {
     public void handleCampaignEvent(MotechEvent event) {
         logger.info(event.toString());
 
-        List<Recipient> recipients;
+        List<Call> calls;
         String externalID = (String)event.getParameters().get("ExternalID");
         long milliStart = System.currentTimeMillis();
         Campaign campaign = campaignDataService.findById(Long.parseLong(externalID));
-        recipients = recipientDataService.findBySlotDayStatus(campaign.getSlot(), campaign.getDay(), Status.Active);
+        logger.info(String.format("Reading all recipients for %s/%s", campaign.getDay(), campaign.getSlot()));
+        calls = callDataService.findByDaySlot(campaign.getDay(), campaign.getSlot());
         long millis = System.currentTimeMillis() - milliStart;
-        float rate = (float) recipients.size() * MILLIS_PER_SECOND / millis;
-        logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", recipients.size(),
-                recipients.size() == 1 ? "" : "s", millis, rate));
+        float rate = (float) calls.size() * MILLIS_PER_SECOND / millis;
+        logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", calls.size(),
+                calls.size() == 1 ? "" : "s", millis, rate));
 
         int count = 0;
         milliStart = System.currentTimeMillis();
-        for(Recipient recipient : recipients) {
-            sendCallMessage(recipient.getPhone());
+        for(Call call : calls) {
+            sendCallMessage(callDataService.getDetachedField(call, "id").toString(), call.getPhone());
             count++;
             if (count % 1000 == 0) {
                 logger.info("Sent {} messages", count);
@@ -168,16 +170,18 @@ public class Kil2ServiceImpl implements Kil2Service {
     @MotechListener(subjects = { CALL_EVENT })
     public void handleCallEvent(MotechEvent event) {
         logger.debug(event.toString());
+        String externalID = (String)event.getParameters().get("externalID");
         String phoneNumber = (String)event.getParameters().get("to");
-        call(phoneNumber);
+        call(externalID, phoneNumber);
         meetExpectation();
     }
 
 
-    private String call(String phoneNumber) {
-        logger.debug("calling {}", phoneNumber);
+    private String call(String externalID, String phoneNumber) {
+        logger.debug("calling {}, {}", externalID, phoneNumber);
 
         Map<String, String> params = new HashMap<>();
+        params.put("externalID", externalID);
         params.put("to", phoneNumber.replaceAll("[^0-9]", ""));
         outboundCallService.initiateCall("config", params);
 
@@ -204,7 +208,7 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    private void setExpectations(int count) {
+    private void setExpectations(long count) {
         logger.info("Setting expectations to {}", count);
 
         try (Jedis jedis = jedisPool.getResource()) {
@@ -266,7 +270,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             messageCampaignService.saveCampaign(campaignRecord);
 
 
-            int slotRecipientCount = (int)recipientDataService.countFindBySlotDayStatus(slot, day, Status.Active);
+            long slotRecipientCount =  callDataService.countFindByDaySlot(day, slot);
             String msg = String.format("Enrolling %s with %d recipient%s in %s/%s @ %s %s", campaignName,
                     slotRecipientCount, slotRecipientCount == 1 ? "" : "s", slot, day, date.toString(), time);
             logger.info(msg);
@@ -344,7 +348,7 @@ public class Kil2ServiceImpl implements Kil2Service {
                     (REDIS_EXPECTATIONS)));
         }
 
-        int recipientCount = (int)recipientDataService.count();
+        int recipientCount = (int) callDataService.count();
         sb.append(String.format("\n\rRecipients: %d", recipientCount));
 
         List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();

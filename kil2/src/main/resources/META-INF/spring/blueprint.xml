@@ -40,6 +40,7 @@
     <osgi:reference id="configurationService" interface="org.motechproject.config.service.ConfigurationService"/>
 
     <osgi:service ref="kil2Service" interface="org.motechproject.kil2.service.Kil2Service" />
+    <osgi:service ref="CDRService" interface="org.motechproject.kil2.service.CDRService" />
 
     <osgi:reference id="messageCampaignService" interface="org.motechproject.messagecampaign.service.MessageCampaignService"/>
 
@@ -47,8 +48,9 @@
 
     <osgi:reference id="ivrOutboundCallService" interface="org.motechproject.ivr.service.OutboundCallService"/>
 
-    <osgi:reference id="recipientDataService" interface="org.motechproject.kil2.database.RecipientDataService"/>
+    <osgi:reference id="callDataService" interface="org.motechproject.kil2.database.CallDataService"/>
     <osgi:reference id="campaignDataService" interface="org.motechproject.kil2.database.CampaignDataService"/>
+    <osgi:reference id="callHistoryDataService" interface="org.motechproject.kil2.database.CallHistoryDataService"/>
 
     <osgi:reference id="schedulerService" interface="org.motechproject.scheduler.service.MotechSchedulerService"/>
 

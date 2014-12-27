@@ -59,7 +59,7 @@ public class Campaign {
     @Override
     public String toString() {
         return "Campaign{" +
-                ", day='" + day + '\'' +
+                "day='" + day + '\'' +
                 ", slot='" + slot + '\'' +
                 '}';
     }
