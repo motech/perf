@@ -2,10 +2,7 @@ package org.motechproject.kil2.service;
 
 import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.annotations.MotechListener;
-import org.motechproject.kil2.database.Call;
-import org.motechproject.kil2.database.CallDataService;
-import org.motechproject.kil2.database.CallStage;
-import org.motechproject.kil2.database.CallStatus;
+import org.motechproject.kil2.database.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,36 +19,15 @@ public class CDRService {
     private Map<CallStatus, Integer> slotIncrements;
     private Map<CallStage, CallStage> nextStage;
     private CallDataService callDataService;
+    private CallHistoryDataService callHistoryDataService;
+
 
     @Autowired
-    public CDRService(CallDataService callDataService) {
+    public CDRService(CallDataService callDataService, CallHistoryDataService callHistoryDataService) {
         this.callDataService = callDataService;
-
-        slotIncrements = new HashMap<>();
-        slotIncrements.put(CallStatus.NA, 2);
-        slotIncrements.put(CallStatus.NA, 2);
-        slotIncrements.put(CallStatus.NA, 2);
-        slotIncrements.put(CallStatus.NA, 2);
-
-        nextStage = new HashMap<>();
-        nextStage.put(CallStage.FB, CallStage.R1);
-        nextStage.put(CallStage.R1, CallStage.R2);
-        nextStage.put(CallStage.R2, CallStage.R3);
-        nextStage.put(CallStage.R3, CallStage.AB);
+        this.callHistoryDataService = callHistoryDataService;
     }
 
-    private String dayFromDaySlot(String daySlot) {
-        return daySlot.substring(0, 1);
-    }
-
-    private String slotFromDaySlot(String daySlot) {
-        return daySlot.substring(1, 2);
-    }
-
-
-    private String daySlot(String day, String slot) {
-        return day+slot;
-    }
 
     private int callStatusSlotIncrement(CallStatus callStatus) {
         switch (callStatus) {
@@ -64,11 +40,14 @@ public class CDRService {
                 throw new IllegalArgumentException();
         }
     }
+
+
     private String nextSlot(String slot, CallStatus callStatus) {
         int count = callStatusSlotIncrement(callStatus);
         int s = (Integer.valueOf(slot) + count) % 6;
         return String.format("%d", s);
     }
+
 
     private String nextDay(String day, String slot, CallStatus callStatus) {
         int count = callStatusSlotIncrement(callStatus);
@@ -77,17 +56,25 @@ public class CDRService {
         return String.format("%d", d);
     }
 
+
+    private void addCallHistory(Call call, CallStatus callStatus, RecipientStatus recipientStatus) {
+        CallHistory callHistory = new CallHistory(call.getDay(), call.getSlot(), call.getCallStage(), call.getPhone(),
+                call.getLanguage(), call.getExpectedDeliveryDate(), callStatus, recipientStatus);
+        callHistoryDataService.create(callHistory);
+    }
+
+
     private void processCallDetailRecord(String callID, CallStatus callStatus) {
         logger.debug("processCallDetailRecord(callID={}, callStatus={})", callID, callStatus);
 
-        //todo: add something to callHistory
-
         Call call = callDataService.findById(Long.parseLong(callID));
+
         String day = call.getDay();
         String slot = call.getSlot();
 
         if (CallStatus.OK == callStatus) {
             if (call.getInitialDay().equals(day) && call.getInitialSlot().equals(slot)) {
+                addCallHistory(call, callStatus, RecipientStatus.AC);
                 return;
             } else {
                 call.setDay(call.getInitialDay());
@@ -121,6 +108,7 @@ public class CDRService {
             }
         }
         callDataService.update(call);
+        addCallHistory(call, callStatus, RecipientStatus.AC);
     }
 
 
