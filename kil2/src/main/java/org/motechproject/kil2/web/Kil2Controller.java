@@ -123,17 +123,33 @@ public class Kil2Controller {
 
 
     /*
-     * /reset-expectations
+     * /reload
      *
-     * resets expectations to zero
+     * reloads day list & slot list from the database
+     *
      * returns 'OK'
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/reset")
-    public String reset() {
-        return kil2Service.reset();
+    @RequestMapping(value = "/reload")
+    public String reload() {
+        return kil2Service.reload();
+    }
+
+
+
+    /*
+     * /delete-all-jobs
+     *
+     * deletes & unschedules all jobs
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/delete-all-jobs")
+    public String deleteAllJobs() {
+        return kil2Service.deleteAllJobs();
     }
 
 

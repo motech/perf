@@ -28,13 +28,12 @@ for k, v in slots_def.iteritems():
     for i in range(v):
         slots.append(k)
 random.shuffle(slots)
-days = ['1', '2', '3', '4', '5', '6', '7']
-base_load = len(days) * len(slots)
+days = []
 
 
 def write_recipients(start, f):
     id = start
-    last = start + base_load -1
+    last = start + len(days) * len(slots) -1
     random.shuffle(days)
     for day in days:
         random.shuffle(slots)
@@ -50,12 +49,14 @@ def write_recipients(start, f):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--output", help="output file name")
-    parser.add_argument("-x", "--multiplier", help="number of times to multiply the base load ({0})".format(base_load), default=1, type=int)
+    parser.add_argument("-x", "--multiplier", help="number of times to multiply the base load", default=1, type=int)
+    parser.add_argument("-d", "--days", help="number of days to populate", default=7, type=int)
     parser.add_argument("-s", "--start", help="start with id#", default=1, type=int)
     parser.add_argument("-t", "--truncate", help="truncate the recipients table", action="store_true")
     args = parser.parse_args()
 
-    # print "Generating {0:,d} recipient{1}...".format(args.count, '' if args.count == 1 else 's')
+    for i in range(1, args.days+1):
+        days.append("{0:d}".format(i))
     if (args.output):
         f = open(args.output, 'w')
     else:

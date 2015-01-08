@@ -11,7 +11,6 @@ import org.motechproject.ivr.service.OutboundCallService;
 import org.motechproject.kil2.database.*;
 import org.motechproject.mds.query.QueryParams;
 import org.motechproject.mds.query.SqlQueryExecution;
-import org.motechproject.mds.util.Order;
 import org.motechproject.scheduler.contract.JobBasicInfo;
 import org.motechproject.scheduler.contract.JobId;
 import org.motechproject.scheduler.contract.RunOnceJobId;
@@ -42,7 +41,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
     private static final String JOB_EVENT = "org.motechproject.kil2.job";
     private static final String CALL_EVENT = "org.motechproject.kil2.call";
-    private static final Integer MAX_CALL_BLOCK = 1000;
+    private static final Integer MAX_CALL_BLOCK = 10000;
 
     private final static long MILLIS_PER_SECOND = 1000;
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
@@ -113,7 +112,7 @@ public class Kil2ServiceImpl implements Kil2Service {
             throw new RuntimeException("Could not get instance host name: " + e.toString(), e);
         }
 
-        reset();
+        reload();
 
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.setnx(REDIS_JOB_ID, "0");
@@ -158,7 +157,9 @@ public class Kil2ServiceImpl implements Kil2Service {
             page++;
             numCalls += numBlockCalls;
 
-            logger.info(String.format("Read %d recipient%s", numCalls, numCalls == 1 ? "" : "s"));
+            if (numBlockCalls > 0) {
+                logger.info(String.format("Read %d recipient%s", numCalls, numCalls == 1 ? "" : "s"));
+            }
         } while (numBlockCalls > 0);
 
         long millis = System.currentTimeMillis() - milliStart;
@@ -325,14 +326,19 @@ public class Kil2ServiceImpl implements Kil2Service {
                 long milliStart = Long.valueOf(jedis.get(redisJobTimer(jobId)));
                 long millis = milliStop - milliStart;
                 long expectations = Long.valueOf(jedis.get(redisJobExpectations(jobId)));
-                float rate = (float) Long.valueOf(jedis.get(redisJobExpectations(jobId))) * MILLIS_PER_SECOND / millis;
+                float rate = (float) expectations * MILLIS_PER_SECOND / millis;
                 logger.info("Measured {} calls at {} calls/second", expectations, rate);
 
                 deleteRedisJob(jedis, jobId);
 
             } else if (expecting % 1000 == 0) {
-                logger.info("Expectations: {}/{}", jedis.get(redisJobExpecting(jobId)),
-                        jedis.get(redisJobExpectations(jobId)));
+                long milliStop = redisTime(jedis);
+                long milliStart = Long.valueOf(jedis.get(redisJobTimer(jobId)));
+                long millis = milliStop - milliStart;
+                long expectations = Long.valueOf(jedis.get(redisJobExpectations(jobId)));
+                long count = expectations - expecting;
+                float rate = (float) count * MILLIS_PER_SECOND / millis;
+                logger.info(String.format("Expectations: %d/%d @ %f/s", expecting, expectations, rate));
             }
         }
     }
@@ -386,7 +392,26 @@ public class Kil2ServiceImpl implements Kil2Service {
 
 
 
-    public String reset() {
+    public String deleteAllJobs() {
+        logger.info("deleteAllJobs()");
+
+        logger.info("deleting all redis job data");
+        try (Jedis jedis = jedisPool.getResource()) {
+            for (String key : jedis.keys(String.format("%s*", JOB_EVENT))) {
+                jedis.del(key);
+            }
+        }
+
+        logger.info("deleting all scheduler jobs");
+        schedulerService.safeUnscheduleAllJobs(JOB_EVENT);
+
+        return "OK";
+    }
+
+
+
+    public String reload() {
+        logger.info("reload()");
 
         slotList = readList("slot");
         dayList = readList("day");
@@ -402,8 +427,22 @@ public class Kil2ServiceImpl implements Kil2Service {
 
 
     public String listJobs() {
-        StringBuilder sb = new StringBuilder("[");
+        logger.info("listJobs()");
+        StringBuilder sb = new StringBuilder("redis: [");
         String sep = "";
+        try (Jedis jedis = jedisPool.getResource()) {
+            for (String key : jedis.keys(String.format("%s*", JOB_EVENT))) {
+                if (key.endsWith("-expectations")) {
+                    sb.append(sep);
+                    sb.append(key.substring(0, key.length()-"-expectations".length()));
+                    if (sep.isEmpty()) {
+                        sep = ",";
+                    }
+                }
+            }
+        }
+        sb.append("]\r\nscheduler: [");
+        sep = "";
         for (JobBasicInfo info : schedulerService.getScheduledJobsBasicInfo()) {
             sb.append(sep);
             sb.append(info.getName());
