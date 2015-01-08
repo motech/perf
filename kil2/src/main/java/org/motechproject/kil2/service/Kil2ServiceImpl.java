@@ -10,12 +10,10 @@ import org.motechproject.event.listener.annotations.MotechListener;
 import org.motechproject.ivr.service.OutboundCallService;
 import org.motechproject.kil2.database.*;
 import org.motechproject.mds.query.SqlQueryExecution;
-import org.motechproject.messagecampaign.EventKeys;
-import org.motechproject.messagecampaign.contract.CampaignRequest;
-import org.motechproject.messagecampaign.domain.campaign.CampaignType;
-import org.motechproject.messagecampaign.service.MessageCampaignService;
-import org.motechproject.messagecampaign.userspecified.CampaignMessageRecord;
-import org.motechproject.messagecampaign.userspecified.CampaignRecord;
+import org.motechproject.scheduler.contract.JobBasicInfo;
+import org.motechproject.scheduler.contract.JobId;
+import org.motechproject.scheduler.contract.RunOnceJobId;
+import org.motechproject.scheduler.contract.RunOnceSchedulableJob;
 import org.motechproject.scheduler.service.MotechSchedulerService;
 import org.motechproject.server.config.SettingsFacade;
 import org.slf4j.Logger;
@@ -30,11 +28,9 @@ import redis.clients.jedis.JedisPoolConfig;
 import javax.jdo.Query;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
+
+import static org.motechproject.commons.date.util.DateUtil.newDateTime;
 
 
 @Service("kil2Service")
@@ -42,23 +38,20 @@ public class Kil2ServiceImpl implements Kil2Service {
 
     private final static String REDIS_SERVER_PROPERTY = "kil2.redis_server";
 
+    private static final String JOB_EVENT = "org.motechproject.kil2.job";
     private static final String CALL_EVENT = "org.motechproject.kil2.call";
 
     private final static long MILLIS_PER_SECOND = 1000;
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
             "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
     private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
-    private static final String REDIS_EXPECTATIONS = "expectations";
-    private static final String REDIS_EXPECTING = "expecting";
-    private static final String REDIS_TIMESTAMP = "timestamp";
-    private static final String REDIS_CAMPAIGN_ID = "campaign_id";
+
+    private final static String REDIS_JOB_ID = "job_id";
     private Logger logger = LoggerFactory.getLogger(Kil2ServiceImpl.class);
     SettingsFacade settingsFacade;
     private EventRelay eventRelay;
-    private MessageCampaignService messageCampaignService;
     private OutboundCallService outboundCallService;
     private CallDataService callDataService;
-    private CampaignDataService campaignDataService;
     private MotechSchedulerService schedulerService;
     private String redisServer;
     private List<String> slotList;
@@ -70,15 +63,12 @@ public class Kil2ServiceImpl implements Kil2Service {
 
     @Autowired
     public Kil2ServiceImpl(@Qualifier("kil2Settings") SettingsFacade settingsFacade, EventRelay eventRelay,
-                           MessageCampaignService messageCampaignService, OutboundCallService outboundCallService,
-                           CallDataService callDataService, CampaignDataService campaignDataService,
-                           MotechSchedulerService schedulerService) {
+                           OutboundCallService outboundCallService,
+                           CallDataService callDataService, MotechSchedulerService schedulerService) {
         this.settingsFacade = settingsFacade;
         this.eventRelay = eventRelay;
-        this.messageCampaignService = messageCampaignService;
         this.outboundCallService = outboundCallService;
         this.callDataService = callDataService;
-        this.campaignDataService = campaignDataService;
         this.schedulerService = schedulerService;
         setupData();
     }
@@ -123,13 +113,14 @@ public class Kil2ServiceImpl implements Kil2Service {
         reset();
 
         try (Jedis jedis = jedisPool.getResource()) {
-            jedis.setnx(REDIS_CAMPAIGN_ID, "0");
+            jedis.setnx(REDIS_JOB_ID, "0");
         }
     }
 
 
-    private void sendCallMessage(String recipientID, String phoneNumber) {
+    private void sendCallMessage(String jobId, String recipientID, String phoneNumber) {
         Map<String, Object> eventParams = new HashMap<>();
+        eventParams.put("jobId", jobId);
         eventParams.put("externalID", recipientID);
         eventParams.put("to", phoneNumber);
         MotechEvent event = new MotechEvent(CALL_EVENT, eventParams);
@@ -137,25 +128,28 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    @MotechListener(subjects = { EventKeys.SEND_MESSAGE })
-    public void handleCampaignEvent(MotechEvent event) {
+    @MotechListener(subjects = { JOB_EVENT })
+    public void handleJobEvent(MotechEvent event) {
         logger.info(event.toString());
 
         List<Call> calls;
-        String externalID = (String)event.getParameters().get("ExternalID");
+        String jobId = (String)event.getParameters().get("JobID");
+        String day = (String)event.getParameters().get("day");
+        String slot = (String)event.getParameters().get("slot");
+        logger.info(String.format("Reading all recipients for %s/%s", day, slot));
         long milliStart = System.currentTimeMillis();
-        Campaign campaign = campaignDataService.findById(Long.parseLong(externalID));
-        logger.info(String.format("Reading all recipients for %s/%s", campaign.getDay(), campaign.getSlot()));
-        calls = callDataService.findByDaySlot(campaign.getDay(), campaign.getSlot());
+        calls = callDataService.findByDaySlot(day, slot);
         long millis = System.currentTimeMillis() - milliStart;
         float rate = (float) calls.size() * MILLIS_PER_SECOND / millis;
         logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", calls.size(),
                 calls.size() == 1 ? "" : "s", millis, rate));
 
+        setExpectations(jobId, (long)calls.size());
+
         int count = 0;
         milliStart = System.currentTimeMillis();
         for(Call call : calls) {
-            sendCallMessage(callDataService.getDetachedField(call, "id").toString(), call.getPhone());
+            sendCallMessage(jobId, callDataService.getDetachedField(call, "id").toString(), call.getPhone());
             count++;
             if (count % 1000 == 0) {
                 logger.info("Sent {} messages", count);
@@ -172,8 +166,9 @@ public class Kil2ServiceImpl implements Kil2Service {
         logger.debug(event.toString());
         String externalID = (String)event.getParameters().get("externalID");
         String phoneNumber = (String)event.getParameters().get("to");
+        String jobId = (String)event.getParameters().get("jobId");
         call(externalID, phoneNumber);
-        meetExpectation();
+        meetExpectation(jobId);
     }
 
 
@@ -195,9 +190,11 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    private String extractTime(String datetime) {
-        String time = datetime.replaceAll(DATE_TIME_REGEX, "$7:$9");
-        return time;
+    private DateTime extractDateTime(String datetime) {
+        int h = Integer.valueOf(datetime.replaceAll(DATE_TIME_REGEX, "$7"));
+        int m = Integer.valueOf(datetime.replaceAll(DATE_TIME_REGEX, "$9"));
+
+        return newDateTime(extractDate(datetime), h, m, 0);
     }
 
 
@@ -208,27 +205,7 @@ public class Kil2ServiceImpl implements Kil2Service {
     }
 
 
-    private void setExpectations(long count) {
-        logger.info("Setting expectations to {}", count);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(REDIS_EXPECTATIONS, String.valueOf(count));
-            jedis.set(REDIS_EXPECTING, String.valueOf(count));
-            logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
-        }
-    }
-
-
-    private String createCampaign(String day, String slot) {
-        Campaign campaign = new Campaign(day, slot);
-        campaignDataService.create(campaign);
-        String id =campaignDataService.getDetachedField(campaign, "id").toString();
-        logger.info("Created campaign {}: {}", id, campaign);
-        return id;
-    }
-
-
-    public String createDaySlotCampaign(String dateOrPeriod, String day, String slot) {
+    public String scheduleJob(String dateOrPeriod, String day, String slot) {
         if (!dayList.contains(day)) {
             return String.format("%s is not a valid day. Valid days: %s", day, dayList);
         }
@@ -236,135 +213,170 @@ public class Kil2ServiceImpl implements Kil2Service {
             return String.format("%s is not a valid slot. Valid slots: %s", slot, slotList);
         }
 
-        try (Jedis jedis = jedisPool.getResource()) {
-            LocalDate date;
-            String time;
-            if (dateOrPeriod.matches(DATE_TIME_REGEX)) {
-                date = extractDate(dateOrPeriod);
-                time = extractTime(dateOrPeriod);
+        DateTime dt;
+        if (dateOrPeriod.matches(DATE_TIME_REGEX)) {
+
+            dt = extractDateTime(dateOrPeriod);
+        }
+        else if (dateOrPeriod.matches(DURATION_REGEX)) {
+            Period period = new JodaFormatter().parsePeriod(fixPeriod(dateOrPeriod));
+            dt = DateTime.now().plus(period.toPeriod());
+        }
+        else {
+            throw new IllegalStateException(String.format("%s seems to be neither a datetime or a duration.",
+                    dateOrPeriod));
+        }
+
+        long slotRecipientCount =  callDataService.countFindByDaySlot(day, slot);
+
+        if (slotRecipientCount > 0) {
+
+            try (Jedis jedis = jedisPool.getResource()) {
+
+                long jobId = jedis.incr(REDIS_JOB_ID);
+
+                Map<String, Object> params = new HashMap<>();
+                params.put("JobID", String.valueOf(jobId));
+                params.put("day", day);
+                params.put("slot", slot);
+
+                MotechEvent motechEvent = new MotechEvent(JOB_EVENT, params);
+
+                RunOnceSchedulableJob runOnceSchedulableJob = new RunOnceSchedulableJob(motechEvent, dt.toDate());
+
+                JobId jobid = new RunOnceJobId(motechEvent);
+                logger.info(String.format("%s: day %s slot %s, %d recipients", jobid.toString(), day, slot, slotRecipientCount));
+
+                schedulerService.scheduleRunOnceJob(runOnceSchedulableJob);
+
+                return dt.toDate().toString();
             }
-            else if (dateOrPeriod.matches(DURATION_REGEX)) {
-                Period period = new JodaFormatter().parsePeriod(fixPeriod(dateOrPeriod));
-                DateTime now = DateTime.now().plus(period.toPeriod());
-                date = now.toLocalDate();
-                time = String.format("%02d:%02d", now.getHourOfDay(), now.getMinuteOfHour());
-            }
-            else {
-                throw new IllegalStateException(String.format("%s seems to be neither a datetime or a duration.",
-                        dateOrPeriod));
-            }
-
-            CampaignRecord campaignRecord = new CampaignRecord();
-            String campaignName = String.format("Campaign%s", jedis.incr(REDIS_CAMPAIGN_ID));
-            campaignRecord.setName(campaignName);
-            campaignRecord.setCampaignType(CampaignType.ABSOLUTE);
-
-            //todo: create 9 months campaigns...
-            CampaignMessageRecord firstMessage = new CampaignMessageRecord();
-            firstMessage.setName("firstMessage");
-            firstMessage.setDate(date);
-            firstMessage.setStartTime(time);
-            firstMessage.setMessageKey("first");
-
-            campaignRecord.setMessages(Arrays.asList(firstMessage));
-            messageCampaignService.saveCampaign(campaignRecord);
-
-
-            long slotRecipientCount =  callDataService.countFindByDaySlot(day, slot);
-            String msg = String.format("Enrolling %s with %d recipient%s in %s/%s @ %s %s", campaignName,
-                    slotRecipientCount, slotRecipientCount == 1 ? "" : "s", slot, day, date.toString(), time);
-            logger.info(msg);
-            String externalID = createCampaign(day, slot);
-            CampaignRequest campaignRequest = new CampaignRequest(externalID, campaignName, LocalDate.now(), null);
-            messageCampaignService.enroll(campaignRequest);
-
-            setExpectations(slotRecipientCount);
-            return msg;
+        } else {
+            return "No recipients!";
         }
     }
 
 
-    public String deleteCampaigns() {
-        logger.info("Delete campaigns...");
-        long milliStart = System.currentTimeMillis();
-
-        schedulerService.safeUnscheduleAllJobs("org.motechproject.messagecampaign");
-
-        List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
-        for (CampaignRecord campaign : campaigns) {
-            String campaignName = campaign.getName();
-            logger.info("Deleting {}...", campaignName);
-            long milliStart2 = System.currentTimeMillis();
-            messageCampaignService.deleteCampaign(campaignName);
-            logger.info("Deleted {} in {}ms", campaignName, System.currentTimeMillis() - milliStart2);
-        }
-
-        logger.info("Deleted in {}ms", System.currentTimeMillis() - milliStart);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(REDIS_CAMPAIGN_ID, "0");
-        }
-
-
-        return "OK";
+    private static String redisJobExpectations(String jobId) {
+        return String.format("%s-expectations", jobId);
     }
 
 
-    private void meetExpectation() {
-        logger.debug("meetExpectation()");
+    private static String redisJobExpecting(String jobId) {
+        return String.format("%s-expecting", jobId);
+    }
+
+
+    private static String redisJobTimer(String jobId) {
+        return String.format("%s-timer", jobId);
+    }
+
+
+    private static long redisTime(Jedis jedis) {
+        List<String> t = jedis.time();
+        return Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
+    }
+
+
+    private void setExpectations(String jobId, long count) {
+        logger.info("setExpectations({}, {})", jobId, count);
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.set(redisJobExpectations(jobId), String.valueOf(count));
+            jedis.set(redisJobExpecting(jobId), String.valueOf(count));
+            jedis.del(redisJobTimer(jobId));
+        }
+    }
+
+
+
+    private void deleteRedisJob(Jedis jedis, String jobId) {
+        jedis.del(redisJobExpectations(jobId));
+        jedis.del(redisJobExpecting(jobId));
+        jedis.del(redisJobTimer(jobId));
+    }
+
+
+
+    private void meetExpectation(String jobId) {
+        logger.debug("meetExpectation({})", jobId);
 
         try (Jedis jedis = jedisPool.getResource()) {
 
             // Start timer if not already started
-            if (!jedis.exists(REDIS_TIMESTAMP)) {
+            if (!jedis.exists(redisJobTimer(jobId))) {
                 List<String> t = jedis.time();
-                Long millis = Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
-                jedis.setnx(REDIS_TIMESTAMP, millis.toString());
+                jedis.setnx(redisJobTimer(jobId), String.valueOf(redisTime(jedis)));
             }
 
-            long expecting = jedis.decr(REDIS_EXPECTING);
+            long expecting = jedis.decr(redisJobExpecting(jobId));
 
             // All expectations met
             if (expecting <= 0) {
                 List<String> t = jedis.time();
-                long milliStop = Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
-                long milliStart = Long.valueOf(jedis.get(REDIS_TIMESTAMP));
+                long milliStop = redisTime(jedis);
+                long milliStart = Long.valueOf(jedis.get(redisJobTimer(jobId)));
                 long millis = milliStop - milliStart;
-                long expectations = Long.valueOf(jedis.get(REDIS_EXPECTATIONS));
-                float rate = (float) Long.valueOf(jedis.get(REDIS_EXPECTATIONS)) * MILLIS_PER_SECOND / millis;
+                long expectations = Long.valueOf(jedis.get(redisJobExpectations(jobId)));
+                float rate = (float) Long.valueOf(jedis.get(redisJobExpectations(jobId))) * MILLIS_PER_SECOND / millis;
                 logger.info("Measured {} calls at {} calls/second", expectations, rate);
-                reset();
+
+                deleteRedisJob(jedis, jobId);
+
             } else if (expecting % 1000 == 0) {
-                logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
+                logger.info("Expectations: {}/{}", jedis.get(redisJobExpecting(jobId)),
+                        jedis.get(redisJobExpectations(jobId)));
             }
         }
     }
 
 
+
     public String getStatus() {
         StringBuilder sb = new StringBuilder();
+        String sep = "";
         try (Jedis jedis = jedisPool.getResource()) {
-            sb.append(String.format("Expectations: %s/%s", jedis.get(REDIS_EXPECTING), jedis.get
-                    (REDIS_EXPECTATIONS)));
+            for (String expectationsKey : jedis.keys("*-expectations")) {
+                String jobId = expectationsKey.substring(0, expectationsKey.length() - "-expectations".length());
+                sb.append(sep);
+                sb.append(String.format("%s: %s/%s", jobId, jedis.get(redisJobExpectations(jobId)),
+                        jedis.get(redisJobExpecting(jobId))));
+                if (sep.isEmpty()) {
+                    sep = "\n\r";
+                }
+            }
         }
 
-        int recipientCount = (int) callDataService.count();
-        sb.append(String.format("\n\rRecipients: %d", recipientCount));
-
-        List<CampaignRecord> campaigns = messageCampaignService.getAllCampaignRecords();
-        sb.append("\n\rCampaigns: ");
-        boolean first = true;
-        for (CampaignRecord campaign : campaigns) {
-            String campaignName = campaign.getName();
-            sb.append(String.format("%s%s", first ? "" : ", ", campaignName));
-            if (first) first = false;
-        }
-        if (first) {
-            sb.append("none");
+        for (String day : dayList) {
+            sb.append(sep);
+            sb.append(String.format("Day %s:", day));
+            for (String slot : slotList) {
+                int recipientCount = (int) callDataService.countFindByDaySlot(day, slot);
+                sb.append(String.format(" %8d", recipientCount));
+            }
+            if (sep.isEmpty()) {
+                sep = "\n\r";
+            }
         }
 
         return sb.toString();
     }
+
+
+
+    public String deleteJob(long id) {
+        logger.info("deleteJob({})", id);
+
+        JobId jobId = new RunOnceJobId(JOB_EVENT, String.valueOf(id));
+        schedulerService.unscheduleJob(jobId);
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            deleteRedisJob(jedis, jobId.toString());
+        }
+
+        return jobId.toString();
+    }
+
 
 
     public String reset() {
@@ -377,12 +389,22 @@ public class Kil2ServiceImpl implements Kil2Service {
         logger.info("slot list: {}", slotList);
         logger.info("day list: {}", dayList);
 
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(REDIS_EXPECTING, "0");
-            jedis.set(REDIS_EXPECTATIONS, "0");
-            jedis.del(REDIS_TIMESTAMP);
-            logger.info("Expectations: {}/{}", jedis.get(REDIS_EXPECTING), jedis.get(REDIS_EXPECTATIONS));
-            return "OK";
+        return "OK";
+    }
+
+
+
+    public String listJobs() {
+        StringBuilder sb = new StringBuilder("[");
+        String sep = "";
+        for (JobBasicInfo info : schedulerService.getScheduledJobsBasicInfo()) {
+            sb.append(sep);
+            sb.append(info.getName());
+            if (sep.isEmpty()) {
+                sep = ",";
+            }
         }
+        sb.append("]");
+        return sb.toString();
     }
 }

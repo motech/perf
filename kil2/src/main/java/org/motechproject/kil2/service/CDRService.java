@@ -44,8 +44,8 @@ public class CDRService {
 
     private String nextSlot(String slot, CallStatus callStatus) {
         int count = callStatusSlotIncrement(callStatus);
-        int s = (Integer.valueOf(slot) + count) % 6;
-        return String.format("%d", s);
+        int s = (Integer.valueOf(slot) + count - 1) % 6;
+        return String.format("%d", s + 1);
     }
 
 

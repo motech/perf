@@ -32,11 +32,13 @@ public class Kil2Controller {
     private final static long MILLIS_PER_SECOND = 1000;
 
 
+
     @Autowired
     public Kil2Controller(Kil2Service kil2Service, RequestMappingHandlerMapping handlerMapping) {
         this.kil2Service = kil2Service;
         this.handlerMapping = handlerMapping;
     }
+
 
 
     /*
@@ -59,17 +61,17 @@ public class Kil2Controller {
 
 
     /*
-     * /create-campaign/{day}/{slot}/{dateOrPeriod}
+     * /schedule-job/{day}/{slot}/{dateOrPeriod}
      *
      * {dateOrPeriod}: yyyy-mm-dd-hh-mm or 5minutes
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/create-campaign/{day}/{slot}/{dateOrPeriod}")
-    public String createCampaign(@PathVariable String dateOrPeriod, @PathVariable String day,
+    @RequestMapping(value = "/schedule-job/{day}/{slot}/{dateOrPeriod}")
+    public String scheduleJob(@PathVariable String dateOrPeriod, @PathVariable String day,
                                  @PathVariable String slot) {
-        return kil2Service.createDaySlotCampaign(dateOrPeriod, day, slot);
+        return kil2Service.scheduleJob(dateOrPeriod, day, slot);
     }
 
 
@@ -89,18 +91,35 @@ public class Kil2Controller {
     }
 
 
+
     /*
-     * /delete-campaigns
+     * /delete-job
      *
-     * removes all campaigns & enrollments & clears schedule
+     * removes job with given id
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/delete-campaigns")
-    public String deleteCampaigns() {
-        return kil2Service.deleteCampaigns();
+    @RequestMapping(value = "/delete-job/{id}")
+    public String deleteCampaigns(@PathVariable Long id) {
+        return kil2Service.deleteJob(id);
     }
+
+
+
+    /*
+     * /list-jobs
+     *
+     * returns job list
+     *
+     */
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @RequestMapping(value = "/list-jobs")
+    public String deleteCampaigns() {
+        return kil2Service.listJobs();
+    }
+
 
 
     /*
@@ -116,6 +135,7 @@ public class Kil2Controller {
     public String reset() {
         return kil2Service.reset();
     }
+
 
 
     @ResponseStatus(value = HttpStatus.BAD_REQUEST)

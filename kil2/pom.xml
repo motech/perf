@@ -56,11 +56,6 @@
             <artifactId>motech-platform-event</artifactId>
             <version>0.26-SNAPSHOT</version>
         </dependency>
-        <dependency>
-            <groupId>org.motechproject</groupId>
-            <artifactId>message-campaign</artifactId>
-            <version>0.26-SNAPSHOT</version>
-        </dependency>
 
         <dependency>
             <groupId>org.apache.servicemix.bundles</groupId>
