@@ -9,7 +9,9 @@ import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
 import org.motechproject.ivr.service.OutboundCallService;
 import org.motechproject.kil2.database.*;
+import org.motechproject.mds.query.QueryParams;
 import org.motechproject.mds.query.SqlQueryExecution;
+import org.motechproject.mds.util.Order;
 import org.motechproject.scheduler.contract.JobBasicInfo;
 import org.motechproject.scheduler.contract.JobId;
 import org.motechproject.scheduler.contract.RunOnceJobId;
@@ -40,6 +42,7 @@ public class Kil2ServiceImpl implements Kil2Service {
 
     private static final String JOB_EVENT = "org.motechproject.kil2.job";
     private static final String CALL_EVENT = "org.motechproject.kil2.call";
+    private static final Integer MAX_CALL_BLOCK = 1000;
 
     private final static long MILLIS_PER_SECOND = 1000;
     private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
@@ -132,32 +135,36 @@ public class Kil2ServiceImpl implements Kil2Service {
     public void handleJobEvent(MotechEvent event) {
         logger.info(event.toString());
 
-        List<Call> calls;
         String jobId = (String)event.getParameters().get("JobID");
         String day = (String)event.getParameters().get("day");
         String slot = (String)event.getParameters().get("slot");
-        logger.info(String.format("Reading all recipients for %s/%s", day, slot));
+
         long milliStart = System.currentTimeMillis();
-        calls = callDataService.findByDaySlot(day, slot);
-        long millis = System.currentTimeMillis() - milliStart;
-        float rate = (float) calls.size() * MILLIS_PER_SECOND / millis;
-        logger.info(String.format("Read %d recipient%s in %dms (%s/sec)", calls.size(),
-                calls.size() == 1 ? "" : "s", millis, rate));
 
-        setExpectations(jobId, (long)calls.size());
+        int expectedNumCalls = (int)callDataService.countFindByDaySlot(day, slot);
+        setExpectations(jobId, (long) expectedNumCalls);
 
-        int count = 0;
-        milliStart = System.currentTimeMillis();
-        for(Call call : calls) {
-            sendCallMessage(jobId, callDataService.getDetachedField(call, "id").toString(), call.getPhone());
-            count++;
-            if (count % 1000 == 0) {
-                logger.info("Sent {} messages", count);
+        int page = 1;
+        int numBlockCalls = 0;
+        long numCalls = 0;
+        do {
+            List<Call> calls = callDataService.findByDaySlot(day, slot, new QueryParams(page, MAX_CALL_BLOCK));
+            numBlockCalls = calls.size();
+
+            for (Call call : calls) {
+                sendCallMessage(jobId, callDataService.getDetachedField(call, "id").toString(), call.getPhone());
             }
-        }
-        millis = System.currentTimeMillis() - milliStart;
-        rate = (float) count * MILLIS_PER_SECOND / millis;
-        logger.info(String.format("Sent %d message%s in %dms (%s/sec)", count, count == 1 ? "" : "s", millis, rate));
+
+            page++;
+            numCalls += numBlockCalls;
+
+            logger.info(String.format("Read %d recipient%s", numCalls, numCalls == 1 ? "" : "s"));
+        } while (numBlockCalls > 0);
+
+        long millis = System.currentTimeMillis() - milliStart;
+        float rate = (float) numCalls * MILLIS_PER_SECOND / millis;
+
+        logger.info(String.format("%d message%s in %dms (%s/sec)", numCalls, numCalls == 1 ? "" : "s", millis, rate));
     }
 
 
