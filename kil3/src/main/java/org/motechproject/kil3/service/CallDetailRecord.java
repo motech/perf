@@ -1,33 +1,34 @@
 package org.motechproject.kil3.service;
 
+import org.motechproject.kil3.database.CallStatus;
+
 import java.io.Serializable;
 
 public class CallDetailRecord implements Serializable {
     private static final long serialVersionUID = -1706017553940100679L;
     private String id;
+    private String recipient;
     private String number;
-    private String status;
+    private CallStatus callStatus;
 
-    public CallDetailRecord(String id, String number, String status) {
+    public CallDetailRecord(String id, String recipient, String number, CallStatus callStatus) {
         this.id = id;
+        this.recipient = recipient;
         this.number = number;
-        this.status = status;
-    }
-
-    public CallDetailRecord() {
-
+        this.callStatus = callStatus;
     }
 
     public static void validate(String string) throws Exception {
         String[] fields = string.split("\\s*,\\s*");
-        if (fields.length != 3) {
+        if (fields.length != 4) {
             throw new Exception("Invalid CDR");
         }
+        CallStatus.valueOf(fields[3]);
     }
 
     public static CallDetailRecord fromString(String string) {
         String[] fields = string.split("\\s*,\\s*");
-        return new CallDetailRecord(fields[0], fields[1], fields[2]);
+        return new CallDetailRecord(fields[0], fields[1], fields[2], CallStatus.valueOf(fields[3]));
     }
 
     public String getId() {
@@ -38,6 +39,14 @@ public class CallDetailRecord implements Serializable {
         this.id = id;
     }
 
+    public String getRecipient() {
+        return recipient;
+    }
+
+    public void setRecipient(String recipient) {
+        this.recipient = recipient;
+    }
+
     public String getNumber() {
         return number;
     }
@@ -46,12 +55,12 @@ public class CallDetailRecord implements Serializable {
         this.number = number;
     }
 
-    public String getStatus() {
-        return status;
+    public CallStatus getCallStatus() {
+        return callStatus;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setCallStatus(CallStatus callStatus) {
+        this.callStatus = callStatus;
     }
 
     @Override
@@ -63,7 +72,8 @@ public class CallDetailRecord implements Serializable {
 
         if (!id.equals(that.id)) return false;
         if (!number.equals(that.number)) return false;
-        if (!status.equals(that.status)) return false;
+        if (!recipient.equals(that.recipient)) return false;
+        if (!callStatus.equals(that.callStatus)) return false;
 
         return true;
     }
@@ -71,8 +81,9 @@ public class CallDetailRecord implements Serializable {
     @Override
     public int hashCode() {
         int result = id.hashCode();
+        result = 31 * result + recipient.hashCode();
         result = 31 * result + number.hashCode();
-        result = 31 * result + status.hashCode();
+        result = 31 * result + callStatus.hashCode();
         return result;
     }
 
@@ -80,8 +91,9 @@ public class CallDetailRecord implements Serializable {
     public String toString() {
         return "CallDetailRecord{" +
                 "id='" + id + '\'' +
+                ", recipient='" + recipient + '\'' +
                 ", number='" + number + '\'' +
-                ", status='" + status + '\'' +
+                ", callStatus='" + callStatus + '\'' +
                 '}';
     }
 }

@@ -182,7 +182,7 @@ public class CDRService {
 
     @MotechListener(subjects = { IVR_CALL_STATUS })
     public void handleStatusEvent(MotechEvent event) {
-        logger.debug(event.toString());
+        logger.debug("handleStatusEvent(event={})", event.toString());
 
         Object o = event.getParameters().get("provider_extra_data");
         if (o instanceof HashMap) {
@@ -196,16 +196,56 @@ public class CDRService {
 
     @MotechListener(subjects = {CDR_PROCESS_SLOTTING})
     public void processSlotting(MotechEvent event) {
-        logger.debug(event.toString());
+        logger.debug("processSlotting(event={})", event.toString());
 
-        Object o = event.getParameters().get("CDR");
-        if (o instanceof CallDetailRecord) {
+        String line = (String)event.getParameters().get("CDR");
+        CallDetailRecord cdr = CallDetailRecord.fromString(line);
+        logger.debug("Processing slotting for {}...", cdr);
 
-            CallDetailRecord cdr = (CallDetailRecord)o;
-            logger.debug("Processing slotting for {}...", cdr);
+        Recipient recipient = recipientDataService.findById(Long.parseLong(cdr.getRecipient()));
+        logger.debug("Recipient before: {}", recipient);
+        String day = recipient.getDay();
+        String slot = recipient.getSlot();
+        CallStatus callStatus = cdr.getCallStatus();
+
+        if (CallStatus.OK == callStatus) {
+            if (recipient.getInitialDay().equals(day) && recipient.getInitialSlot().equals(slot)) {
+                addCallHistory(recipient, callStatus, RecipientStatus.AC);
+                return;
+            } else {
+                recipient.setDay(recipient.getInitialDay());
+                recipient.setSlot(recipient.getInitialSlot());
+            }
         } else {
-            throw new IllegalStateException("Invalid event payload");
+            switch (recipient.getCallStage()) {
+                case FB:
+                    recipient.setCallStage(CallStage.R1);
+                    recipient.setDay(nextDay(day, slot, callStatus));
+                    recipient.setSlot(nextSlot(slot, callStatus));
+                    break;
+
+                case R1:
+                    recipient.setCallStage(CallStage.R2);
+                    recipient.setDay(nextDay(day, slot, callStatus));
+                    recipient.setSlot(nextSlot(slot, callStatus));
+                    break;
+
+                case R2:
+                    recipient.setCallStage(CallStage.R3);
+                    recipient.setDay(nextDay(day, slot, callStatus));
+                    recipient.setSlot(nextSlot(slot, callStatus));
+                    break;
+
+                case R3:
+                    recipient.setCallStage(CallStage.FB);
+                    recipient.setDay(recipient.getInitialDay());
+                    recipient.setSlot(recipient.getInitialSlot());
+                    break;
+            }
         }
+        recipientDataService.update(recipient);
+        logger.debug("Recipient after: {}", recipient);
+        addCallHistory(recipient, callStatus, RecipientStatus.AC);
     }
 
 
@@ -226,7 +266,7 @@ public class CDRService {
                     }
                     Map<String, Object> eventParams = new HashMap<>();
                     CallDetailRecord.validate(line);
-                    eventParams.put("CDR", CallDetailRecord.fromString(line));
+                    eventParams.put("CDR", line);
                     MotechEvent motechEvent = new MotechEvent(CDR_PROCESS_SLOTTING, eventParams);
                     eventRelay.sendEventMessage(motechEvent);
                 } catch (Exception e) {
