@@ -62,9 +62,10 @@ if __name__ == '__main__':
     else:
         f = sys.stdout
     if args.truncate:
-        f.write('TRUNCATE TABLE KIL2_CALL;\n')
+        f.write('TRUNCATE TABLE KIL3_RECIPIENT;\n')
     id = args.start
     for i in range(args.multiplier):
-        f.write('LOCK TABLES KIL2_CALL WRITE;\nINSERT INTO KIL2_CALL (creationDate,modificationDate,creator,owner,modifiedBy,id,initialDay,day,initialSlot,slot,callStage,phone,language,expectedDeliveryDate) VALUES\n')
+        f.write('LOCK TABLES KIL3_RECIPIENT WRITE;\n')
+        f.write('INSERT INTO KIL3_RECIPIENT (creationDate,modificationDate,creator,owner,modifiedBy,id,initialDay,day,initialSlot,slot,callStage,phone,language,expectedDeliveryDate) VALUES\n')
         id = write_recipients(id, f)
         f.write('UNLOCK TABLES;\n')

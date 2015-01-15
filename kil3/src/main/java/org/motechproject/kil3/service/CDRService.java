@@ -1,5 +1,6 @@
 package org.motechproject.kil3.service;
 
+import com.google.common.base.Strings;
 import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
@@ -27,6 +28,7 @@ public class CDRService {
     private final static String CDR_DIRECTORY = "kil3.cdr_directory";
     private static final String IVR_CALL_STATUS = "ivr_recipient_status";
     private static final String CDR_FILE_MODIFIED = "cdr_file_modified";
+    private static final String CDR_PROCESS_SLOTTING = "cdr_process_slotting";
     private Logger logger = LoggerFactory.getLogger(CDRService.class);
     private Map<CallStatus, Integer> slotIncrements;
     private Map<CallStage, CallStage> nextStage;
@@ -42,10 +44,15 @@ public class CDRService {
         WatchService watchService;
         WatchKey watchKey;
 
-        DirWatcherThread() throws IOException {
-            path = Paths.get(settingsFacade.getProperty(CDR_DIRECTORY));
-            watchService = FileSystems.getDefault().newWatchService();
-            watchKey = path.register(watchService, ENTRY_MODIFY);
+        DirWatcherThread() {
+            String cdrDir = settingsFacade.getProperty(CDR_DIRECTORY);
+            path = Paths.get(cdrDir);
+            try {
+                watchService = FileSystems.getDefault().newWatchService();
+                watchKey = path.register(watchService, ENTRY_MODIFY);
+            } catch (IOException e) {
+                logger.error("Unable to watch {} directory: {}", cdrDir, e.getMessage());
+            }
         }
 
         public void run() {
@@ -187,30 +194,18 @@ public class CDRService {
     }
 
 
-    private void processCDR(CallDetailRecord cdr) {
-        logger.info("processCDR(cdr={})", cdr);
+    @MotechListener(subjects = {CDR_PROCESS_SLOTTING})
+    public void processSlotting(MotechEvent event) {
+        logger.debug(event.toString());
 
-    }
+        Object o = event.getParameters().get("CDR");
+        if (o instanceof CallDetailRecord) {
 
-
-    private void readCDR(String path) {
-        logger.info("readCDR(path={})", path);
-        try(BufferedReader br = new BufferedReader(new FileReader(path))) {
-            String line;
-            int lineCount = 0;
-            while ((line = br.readLine()) != null) {
-                try {
-                    processCDR(CallDetailRecord.fromString(line));
-                } catch (Exception e) {
-                    logger.debug("{}({}): invalid CDR format", path, lineCount+1);
-                }
-                lineCount++;
-            }
-            logger.info("Read {} {}", lineCount, lineCount == 1 ? "line" : "lines");
-        } catch (IOException e) {
-            e.printStackTrace();
+            CallDetailRecord cdr = (CallDetailRecord)o;
+            logger.debug("Processing slotting for {}...", cdr);
+        } else {
+            throw new IllegalStateException("Invalid event payload");
         }
-
     }
 
 
@@ -218,6 +213,30 @@ public class CDRService {
     public void handleFileEvent(MotechEvent event) {
         logger.info("handleFileEvent(event={})", event.toString());
 
-        readCDR((String) event.getParameters().get("path"));
+        String path = (String)event.getParameters().get("path");
+
+        try(BufferedReader br = new BufferedReader(new FileReader(path))) {
+            String line;
+            int lineCount = 0;
+            while ((line = br.readLine()) != null) {
+                try {
+                    if (Strings.isNullOrEmpty(line)) {
+                        logger.debug("{}({}): Skipping blank line", path, lineCount + 1);
+                        continue;
+                    }
+                    Map<String, Object> eventParams = new HashMap<>();
+                    CallDetailRecord.validate(line);
+                    eventParams.put("CDR", CallDetailRecord.fromString(line));
+                    MotechEvent motechEvent = new MotechEvent(CDR_PROCESS_SLOTTING, eventParams);
+                    eventRelay.sendEventMessage(motechEvent);
+                } catch (Exception e) {
+                    logger.error("{}({}): invalid CDR format", path, lineCount+1);
+                }
+                lineCount++;
+            }
+            logger.info("Read {} {}", lineCount, lineCount == 1 ? "line" : "lines");
+        } catch (IOException e) {
+            logger.error("Error while reading {}: {}", path, e.getMessage());
+        }
     }
 }

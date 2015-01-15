@@ -1,21 +1,32 @@
 package org.motechproject.kil3.service;
 
-public class CallDetailRecord {
+import java.io.Serializable;
+
+public class CallDetailRecord implements Serializable {
+    private static final long serialVersionUID = -1706017553940100679L;
     private String id;
     private String number;
     private String status;
 
-    protected CallDetailRecord(String id, String number, String status) {
+    public CallDetailRecord(String id, String number, String status) {
         this.id = id;
         this.number = number;
         this.status = status;
     }
 
-    public static final CallDetailRecord fromString(String string) throws Exception {
+    public CallDetailRecord() {
+
+    }
+
+    public static void validate(String string) throws Exception {
         String[] fields = string.split("\\s*,\\s*");
         if (fields.length != 3) {
             throw new Exception("Invalid CDR");
         }
+    }
+
+    public static CallDetailRecord fromString(String string) {
+        String[] fields = string.split("\\s*,\\s*");
         return new CallDetailRecord(fields[0], fields[1], fields[2]);
     }
 
