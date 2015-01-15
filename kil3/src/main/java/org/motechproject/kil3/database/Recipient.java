@@ -8,7 +8,7 @@ import javax.jdo.annotations.Index;
 
 @Entity
 @Index(name="RECIPIENT_DAY_SLOT", members={"day", "slot"})
-public class Call {
+public class Recipient {
     @Field
     @Column(name="initialDay", jdbcType="VARCHAR", length=1)
     private String initialDay;
@@ -41,7 +41,7 @@ public class Call {
     @Column(name="expectedDeliveryDate", jdbcType="VARCHAR", length=8)
     private String expectedDeliveryDate;
 
-    public Call(String initialDay, String day, String initialSlot, String slot, CallStage callStage, String phone, String language, String expectedDeliveryDate) {
+    public Recipient(String initialDay, String day, String initialSlot, String slot, CallStage callStage, String phone, String language, String expectedDeliveryDate) {
         this.initialDay = initialDay;
         this.day = day;
         this.initialSlot = initialSlot;
@@ -121,16 +121,16 @@ public class Call {
         if (this == o) { return true; }
         if (o == null || getClass() != o.getClass()) { return false; }
 
-        Call call = (Call) o;
+        Recipient recipient = (Recipient) o;
 
-        if (callStage != call.callStage) { return false; }
-        if (!day.equals(call.day)) { return false; }
-        if (!expectedDeliveryDate.equals(call.expectedDeliveryDate)) { return false; }
-        if (!initialDay.equals(call.initialDay)) { return false; }
-        if (!initialSlot.equals(call.initialSlot)) { return false; }
-        if (!language.equals(call.language)) { return false; }
-        if (!phone.equals(call.phone)) { return false; }
-        if (!slot.equals(call.slot)) { return false; }
+        if (callStage != recipient.callStage) { return false; }
+        if (!day.equals(recipient.day)) { return false; }
+        if (!expectedDeliveryDate.equals(recipient.expectedDeliveryDate)) { return false; }
+        if (!initialDay.equals(recipient.initialDay)) { return false; }
+        if (!initialSlot.equals(recipient.initialSlot)) { return false; }
+        if (!language.equals(recipient.language)) { return false; }
+        if (!phone.equals(recipient.phone)) { return false; }
+        if (!slot.equals(recipient.slot)) { return false; }
 
         return true;
     }
@@ -150,7 +150,7 @@ public class Call {
 
     @Override
     public String toString() {
-        return "Call{" +
+        return "Recipient{" +
                 "initialDay='" + initialDay + '\'' +
                 ", day='" + day + '\'' +
                 ", initialSlot='" + initialSlot + '\'' +

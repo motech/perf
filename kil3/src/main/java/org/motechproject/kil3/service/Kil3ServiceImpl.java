@@ -53,7 +53,7 @@ public class Kil3ServiceImpl implements Kil3Service {
     SettingsFacade settingsFacade;
     private EventRelay eventRelay;
     private OutboundCallService outboundCallService;
-    private CallDataService callDataService;
+    private RecipientDataService recipientDataService;
     private MotechSchedulerService schedulerService;
     private String redisServer;
     private List<String> slotList;
@@ -66,11 +66,11 @@ public class Kil3ServiceImpl implements Kil3Service {
     @Autowired
     public Kil3ServiceImpl(@Qualifier("kil3Settings") SettingsFacade settingsFacade, EventRelay eventRelay,
                            OutboundCallService outboundCallService,
-                           CallDataService callDataService, MotechSchedulerService schedulerService) {
+                           RecipientDataService recipientDataService, MotechSchedulerService schedulerService) {
         this.settingsFacade = settingsFacade;
         this.eventRelay = eventRelay;
         this.outboundCallService = outboundCallService;
-        this.callDataService = callDataService;
+        this.recipientDataService = recipientDataService;
         this.schedulerService = schedulerService;
         setupData();
     }
@@ -80,7 +80,7 @@ public class Kil3ServiceImpl implements Kil3Service {
 
         final String field = what;
 
-        List<String> slots = (List<String>) callDataService.executeSQLQuery(new SqlQueryExecution<List<String>>() {
+        List<String> slots = (List<String>) recipientDataService.executeSQLQuery(new SqlQueryExecution<List<String>>() {
             @Override
             public List<String> execute(Query query) {
                 return (List<String>) query.execute();
@@ -88,7 +88,7 @@ public class Kil3ServiceImpl implements Kil3Service {
 
             @Override
             public String getSqlQuery() {
-                    return String.format("SELECT DISTINCT %s FROM KIL3_CALL", field);
+                    return String.format("SELECT DISTINCT %s FROM KIL3_RECIPIENT", field);
             }
         });
 
@@ -140,18 +140,18 @@ public class Kil3ServiceImpl implements Kil3Service {
 
         long milliStart = System.currentTimeMillis();
 
-        int expectedNumCalls = (int)callDataService.countFindByDaySlot(day, slot);
+        int expectedNumCalls = (int)recipientDataService.countFindByDaySlot(day, slot);
         setExpectations(jobId, (long) expectedNumCalls);
 
         int page = 1;
         int numBlockCalls = 0;
         long numCalls = 0;
         do {
-            List<Call> calls = callDataService.findByDaySlot(day, slot, new QueryParams(page, MAX_CALL_BLOCK));
+            List<Recipient> calls = recipientDataService.findByDaySlot(day, slot, new QueryParams(page, MAX_CALL_BLOCK));
             numBlockCalls = calls.size();
 
-            for (Call call : calls) {
-                sendCallMessage(jobId, callDataService.getDetachedField(call, "id").toString(), call.getPhone());
+            for (Recipient call : calls) {
+                sendCallMessage(jobId, recipientDataService.getDetachedField(call, "id").toString(), call.getPhone());
             }
 
             page++;
@@ -235,7 +235,7 @@ public class Kil3ServiceImpl implements Kil3Service {
                     dateOrPeriod));
         }
 
-        long slotRecipientCount =  callDataService.countFindByDaySlot(day, slot);
+        long slotRecipientCount =  recipientDataService.countFindByDaySlot(day, slot);
 
         if (slotRecipientCount > 0) {
 
@@ -364,7 +364,7 @@ public class Kil3ServiceImpl implements Kil3Service {
             sb.append(sep);
             sb.append(String.format("Day %s:", day));
             for (String slot : slotList) {
-                int recipientCount = (int) callDataService.countFindByDaySlot(day, slot);
+                int recipientCount = (int) recipientDataService.countFindByDaySlot(day, slot);
                 sb.append(String.format(" %8d", recipientCount));
             }
             if (sep.isEmpty()) {

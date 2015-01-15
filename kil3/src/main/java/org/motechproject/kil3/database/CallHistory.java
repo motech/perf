@@ -4,7 +4,6 @@ import org.motechproject.mds.annotations.Entity;
 import org.motechproject.mds.annotations.Field;
 
 import javax.jdo.annotations.Column;
-import javax.jdo.annotations.Index;
 
 @Entity
 public class CallHistory {
@@ -29,10 +28,6 @@ public class CallHistory {
     private String language;
 
     @Field
-    @Column(name="expectedDeliveryDate", jdbcType="VARCHAR", length=8)
-    private String expectedDeliveryDate;
-
-    @Field
     @Column(name="callStatus", jdbcType="VARCHAR", length=2)
     private CallStatus callStatus;
 
@@ -46,7 +41,6 @@ public class CallHistory {
         this.callStage = callStage;
         this.phone = phone;
         this.language = language;
-        this.expectedDeliveryDate = expectedDeliveryDate;
         this.callStatus = callStatus;
         this.recipientStatus = recipientStatus;
     }
@@ -69,9 +63,6 @@ public class CallHistory {
             return false;
         }
         if (!day.equals(that.day)) {
-            return false;
-        }
-        if (!expectedDeliveryDate.equals(that.expectedDeliveryDate)) {
             return false;
         }
         if (!language.equals(that.language)) {
@@ -97,7 +88,6 @@ public class CallHistory {
         result = 31 * result + callStage.hashCode();
         result = 31 * result + phone.hashCode();
         result = 31 * result + language.hashCode();
-        result = 31 * result + expectedDeliveryDate.hashCode();
         result = 31 * result + callStatus.hashCode();
         result = 31 * result + recipientStatus.hashCode();
         return result;

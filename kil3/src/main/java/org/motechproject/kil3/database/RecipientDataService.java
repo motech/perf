@@ -7,15 +7,15 @@ import org.motechproject.mds.service.MotechDataService;
 
 import java.util.List;
 
-public interface CallDataService extends MotechDataService<Call> {
+public interface RecipientDataService extends MotechDataService<Recipient> {
 
     @Lookup
-    List<Call> findByDaySlot(
+    List<Recipient> findByDaySlot(
             @LookupField(name = "day") String day,
             @LookupField(name = "slot") String slot);
 
     @Lookup
-    List<Call> findByDaySlot(
+    List<Recipient> findByDaySlot(
             @LookupField(name = "day") String day,
             @LookupField(name = "slot") String slot,
             QueryParams queryParams);
