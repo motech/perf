@@ -187,13 +187,23 @@ public class CDRService {
     }
 
 
-    private void parseCDR(String path) {
-        logger.info("parseCDR(path={})", path);
+    private void processCDR(CallDetailRecord cdr) {
+        logger.info("processCDR(cdr={})", cdr);
+
+    }
+
+
+    private void readCDR(String path) {
+        logger.info("readCDR(path={})", path);
         try(BufferedReader br = new BufferedReader(new FileReader(path))) {
             String line;
             int lineCount = 0;
             while ((line = br.readLine()) != null) {
-                String[] fields = line.split(",");
+                try {
+                    processCDR(CallDetailRecord.fromString(line));
+                } catch (Exception e) {
+                    logger.debug("{}({}): invalid CDR format", path, lineCount+1);
+                }
                 lineCount++;
             }
             logger.info("Read {} {}", lineCount, lineCount == 1 ? "line" : "lines");
@@ -208,6 +218,6 @@ public class CDRService {
     public void handleFileEvent(MotechEvent event) {
         logger.info("handleFileEvent(event={})", event.toString());
 
-        parseCDR((String) event.getParameters().get("path"));
+        readCDR((String) event.getParameters().get("path"));
     }
 }
