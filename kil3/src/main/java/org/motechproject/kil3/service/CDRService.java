@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 
@@ -57,6 +59,7 @@ public class CDRService {
 
         public void run() {
             logger.info("DirWatcherThread.run()");
+            Pattern pattern = Pattern.compile("day\\dslot\\d\\.csv");
             while (true) {
                 try {
                     watchKey = this.watchService.take();
@@ -68,10 +71,15 @@ public class CDRService {
                     String file = path.resolve(watchEvent.context()).toString();
                     logger.info("{} {}", event.kind().name(), file);
 
-                    Map<String, Object> eventParams = new HashMap<>();
-                    eventParams.put("path", file);
-                    MotechEvent motechEvent = new MotechEvent(CDR_FILE_MODIFIED, eventParams);
-                    eventRelay.sendEventMessage(motechEvent);
+                    Matcher matcher = pattern.matcher(event.context().toString());
+                    if (matcher.matches()) {
+                        Map<String, Object> eventParams = new HashMap<>();
+                        eventParams.put("path", file);
+                        MotechEvent motechEvent = new MotechEvent(CDR_FILE_MODIFIED, eventParams);
+                        eventRelay.sendEventMessage(motechEvent);
+                    } else {
+                        logger.warn("Ignoring nonstandard file: {}", file);
+                    }
 
                     watchKey.reset();
                 }
@@ -129,68 +137,6 @@ public class CDRService {
         CallHistory recipientHistory = new CallHistory(recipient.getDay(), recipient.getSlot(), recipient.getCallStage(), recipient.getPhone(),
                 recipient.getLanguage(), recipient.getExpectedDeliveryDate(), callStatus, recipientStatus);
         recipientHistoryDataService.create(recipientHistory);
-    }
-
-
-    private void processCallDetailRecord(String recipientID, CallStatus callStatus) {
-        logger.debug("processCallDetailRecord(recipientID={}, callStatus={})", recipientID, callStatus);
-
-        Recipient recipient = recipientDataService.findById(Long.parseLong(recipientID));
-
-        String day = recipient.getDay();
-        String slot = recipient.getSlot();
-
-        if (CallStatus.OK == callStatus) {
-            if (recipient.getInitialDay().equals(day) && recipient.getInitialSlot().equals(slot)) {
-                addCallHistory(recipient, callStatus, RecipientStatus.AC);
-                return;
-            } else {
-                recipient.setDay(recipient.getInitialDay());
-                recipient.setSlot(recipient.getInitialSlot());
-            }
-        } else {
-            switch (recipient.getCallStage()) {
-                case FB:
-                    recipient.setCallStage(CallStage.R1);
-                    recipient.setDay(nextDay(day, slot, callStatus));
-                    recipient.setSlot(nextSlot(slot, callStatus));
-                    break;
-
-                case R1:
-                    recipient.setCallStage(CallStage.R2);
-                    recipient.setDay(nextDay(day, slot, callStatus));
-                    recipient.setSlot(nextSlot(slot, callStatus));
-                    break;
-
-                case R2:
-                    recipient.setCallStage(CallStage.R3);
-                    recipient.setDay(nextDay(day, slot, callStatus));
-                    recipient.setSlot(nextSlot(slot, callStatus));
-                    break;
-
-                case R3:
-                    recipient.setCallStage(CallStage.FB);
-                    recipient.setDay(recipient.getInitialDay());
-                    recipient.setSlot(recipient.getInitialSlot());
-                    break;
-            }
-        }
-        recipientDataService.update(recipient);
-        addCallHistory(recipient, callStatus, RecipientStatus.AC);
-    }
-
-
-    @MotechListener(subjects = { IVR_CALL_STATUS })
-    public void handleStatusEvent(MotechEvent event) {
-        logger.debug("handleStatusEvent(event={})", event.toString());
-
-        Object o = event.getParameters().get("provider_extra_data");
-        if (o instanceof HashMap) {
-            Map<String, String> providerExtraData = (Map<String, String>) o;
-            String recipientID = providerExtraData.get("externalID");
-            CallStatus callStatus = CallStatus.valueOf(event.getParameters().get("recipient_status").toString());
-            processCallDetailRecord(recipientID, callStatus);
-        }
     }
 
 
