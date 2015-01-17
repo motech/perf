@@ -1,20 +1,12 @@
 package org.motechproject.kil3.service;
 
-import org.joda.time.DateTime;
-import org.joda.time.LocalDate;
-import org.joda.time.Period;
-import org.motechproject.commons.date.util.JodaFormatter;
+import com.google.common.base.Strings;
 import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
-import org.motechproject.ivr.service.OutboundCallService;
 import org.motechproject.kil3.database.*;
 import org.motechproject.mds.query.QueryParams;
 import org.motechproject.mds.query.SqlQueryExecution;
-import org.motechproject.scheduler.contract.JobBasicInfo;
-import org.motechproject.scheduler.contract.JobId;
-import org.motechproject.scheduler.contract.RunOnceJobId;
-import org.motechproject.scheduler.contract.RunOnceSchedulableJob;
 import org.motechproject.scheduler.service.MotechSchedulerService;
 import org.motechproject.server.config.SettingsFacade;
 import org.slf4j.Logger;
@@ -22,62 +14,53 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
 
 import javax.jdo.Query;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.*;
-
-import static org.motechproject.commons.date.util.DateUtil.newDateTime;
+import java.io.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 
 @Service("kil3Service")
 public class Kil3ServiceImpl implements Kil3Service {
 
-    private final static String REDIS_SERVER_PROPERTY = "kil3.redis_server";
+    private final static String CALL_DIRECTORY = "kil3.call_directory";
+    private final static String CDR_DIRECTORY = "kil3.cdr_directory";
+    private static final String PROCESS_CDR_FILE = "process_cdr_file";
+    private static final String PROCESS_ONE_CDR = "process_one_cdr";
+    private static final Integer MAX_RECIPIENT_BLOCK = 10000;
 
-    private static final String JOB_EVENT = "org.motechproject.kil3.job";
-    private static final String CALL_EVENT = "org.motechproject.kil3.call";
-    private static final Integer MAX_CALL_BLOCK = 10000;
 
     private final static long MILLIS_PER_SECOND = 1000;
-    private static final String DATE_TIME_REGEX = "([0-9][0-9][0-9][0-9])([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])" +
-            "([^0-9])([0-9][0-9])([^0-9])([0-9][0-9])";
-    private static final String DURATION_REGEX = "([0-9]*)([a-zA-Z]*)";
 
-    private final static String REDIS_JOB_ID = "job_id";
     private Logger logger = LoggerFactory.getLogger(Kil3ServiceImpl.class);
-    SettingsFacade settingsFacade;
+    private SettingsFacade settingsFacade;
     private EventRelay eventRelay;
-    private OutboundCallService outboundCallService;
+    private ExpectationServiceImpl expectationService;
     private RecipientDataService recipientDataService;
+    private CallHistoryDataService callHistoryDataService;
     private MotechSchedulerService schedulerService;
-    private String redisServer;
-    private List<String> slotList;
-    private List<String> dayList;
-    private String hostName;
-    private Random rand;
-    JedisPool jedisPool;
+    private List<String> slotList = Arrays.asList("1", "2", "3", "4", "5", "6");
+    private List<String> dayList = Arrays.asList("1", "2", "3", "4", "5", "6", "7");;
+
 
 
     @Autowired
     public Kil3ServiceImpl(@Qualifier("kil3Settings") SettingsFacade settingsFacade, EventRelay eventRelay,
-                           OutboundCallService outboundCallService,
-                           RecipientDataService recipientDataService, MotechSchedulerService schedulerService) {
+                           ExpectationServiceImpl expectationService, RecipientDataService recipientDataService,
+                           CallHistoryDataService callHistoryDataService, MotechSchedulerService schedulerService) {
         this.settingsFacade = settingsFacade;
         this.eventRelay = eventRelay;
-        this.outboundCallService = outboundCallService;
+        this.expectationService = expectationService;
         this.recipientDataService = recipientDataService;
+        this.callHistoryDataService = callHistoryDataService;
         this.schedulerService = schedulerService;
-        setupData();
     }
 
 
     private List<String> readList(String what) {
-
         final String field = what;
 
         List<String> slots = (List<String>) recipientDataService.executeSQLQuery(new SqlQueryExecution<List<String>>() {
@@ -88,7 +71,7 @@ public class Kil3ServiceImpl implements Kil3Service {
 
             @Override
             public String getSqlQuery() {
-                    return String.format("SELECT DISTINCT %s FROM KIL3_RECIPIENT", field);
+                return String.format("SELECT DISTINCT %s FROM KIL3_RECIPIENT", field);
             }
         });
 
@@ -96,124 +79,24 @@ public class Kil3ServiceImpl implements Kil3Service {
     }
 
 
-    private void setupData() {
-
-        redisServer = settingsFacade.getProperty(REDIS_SERVER_PROPERTY);
-        logger.info("redis server: {}", redisServer);
-
-        rand = new Random();
-
-        jedisPool = new JedisPool(new JedisPoolConfig(), redisServer);
-        
-        try {
-            InetAddress ip = InetAddress.getLocalHost();
-            hostName = ip.getHostName();
-        } catch (UnknownHostException e) {
-            throw new RuntimeException("Could not get instance host name: " + e.toString(), e);
-        }
-
-        reload();
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.setnx(REDIS_JOB_ID, "0");
-        }
+    private String callFileName(String day, String slot) {
+        return String.format("%sday%sslot%s-calls.csv", settingsFacade.getProperty(CALL_DIRECTORY), day, slot);
     }
 
 
-    private void sendCallMessage(String jobId, String recipientID, String phoneNumber) {
-        Map<String, Object> eventParams = new HashMap<>();
-        eventParams.put("jobId", jobId);
-        eventParams.put("externalID", recipientID);
-        eventParams.put("to", phoneNumber);
-        MotechEvent event = new MotechEvent(CALL_EVENT, eventParams);
-        eventRelay.sendEventMessage(event);
+    private String cdrFileName(String day, String slot) {
+        return String.format("%sday%sslot%s-cdrs.csv", settingsFacade.getProperty(CDR_DIRECTORY), day, slot);
     }
 
 
-    @MotechListener(subjects = { JOB_EVENT })
-    public void handleJobEvent(MotechEvent event) {
-        logger.info(event.toString());
-
-        String jobId = (String)event.getParameters().get("JobID");
-        String day = (String)event.getParameters().get("day");
-        String slot = (String)event.getParameters().get("slot");
-
-        long milliStart = System.currentTimeMillis();
-
-        int expectedNumCalls = (int)recipientDataService.countFindByDaySlot(day, slot);
-        setExpectations(jobId, (long) expectedNumCalls);
-
-        int page = 1;
-        int numBlockCalls = 0;
-        long numCalls = 0;
-        do {
-            List<Recipient> calls = recipientDataService.findByDaySlot(day, slot, new QueryParams(page, MAX_CALL_BLOCK));
-            numBlockCalls = calls.size();
-
-            for (Recipient call : calls) {
-                sendCallMessage(jobId, recipientDataService.getDetachedField(call, "id").toString(), call.getPhone());
-            }
-
-            page++;
-            numCalls += numBlockCalls;
-
-            if (numBlockCalls > 0) {
-                logger.info(String.format("Read %d recipient%s", numCalls, numCalls == 1 ? "" : "s"));
-            }
-        } while (numBlockCalls > 0);
-
-        long millis = System.currentTimeMillis() - milliStart;
-        float rate = (float) numCalls * MILLIS_PER_SECOND / millis;
-
-        logger.info(String.format("%d message%s in %dms (%s/sec)", numCalls, numCalls == 1 ? "" : "s", millis, rate));
+    private String callTempFileName(String day, String slot) {
+        return String.format("%s~", callFileName(day, slot));
     }
 
 
-    @MotechListener(subjects = { CALL_EVENT })
-    public void handleCallEvent(MotechEvent event) {
-        logger.debug(event.toString());
-        String externalID = (String)event.getParameters().get("externalID");
-        String phoneNumber = (String)event.getParameters().get("to");
-        String jobId = (String)event.getParameters().get("jobId");
-        call(externalID, phoneNumber);
-        meetExpectation(jobId);
-    }
+    public String createCallFile(String day, String slot) {
+        logger.info("createCallFile(day={}, slot={})", day, slot);
 
-
-    private String call(String externalID, String phoneNumber) {
-        logger.debug("calling {}, {}", externalID, phoneNumber);
-
-        Map<String, String> params = new HashMap<>();
-        params.put("externalID", externalID);
-        params.put("to", phoneNumber.replaceAll("[^0-9]", ""));
-        outboundCallService.initiateCall("config", params);
-
-        return phoneNumber;
-    }
-
-
-    private LocalDate extractDate(String datetime) {
-        String date = datetime.replaceAll(DATE_TIME_REGEX, "$1-$3-$5");
-        return new LocalDate(date);
-    }
-
-
-    private DateTime extractDateTime(String datetime) {
-        int h = Integer.valueOf(datetime.replaceAll(DATE_TIME_REGEX, "$7"));
-        int m = Integer.valueOf(datetime.replaceAll(DATE_TIME_REGEX, "$9"));
-
-        return newDateTime(extractDate(datetime), h, m, 0);
-    }
-
-
-    private String fixPeriod(String delay) {
-        String s = delay.replaceAll("[^a-zA-Z0-9]", " ");
-        s = s.replaceAll("([0-9]*)([a-z]*)", "$1 $2");
-        return s;
-    }
-
-
-    public String scheduleJob(String dateOrPeriod, String day, String slot) {
         if (!dayList.contains(day)) {
             return String.format("%s is not a valid day. Valid days: %s", day, dayList);
         }
@@ -221,144 +104,74 @@ public class Kil3ServiceImpl implements Kil3Service {
             return String.format("%s is not a valid slot. Valid slots: %s", slot, slotList);
         }
 
-        DateTime dt;
-        if (dateOrPeriod.matches(DATE_TIME_REGEX)) {
+        String callFileName = callFileName(day, slot);
+        String callTempFileName = callTempFileName(day, slot);
 
-            dt = extractDateTime(dateOrPeriod);
+        long milliStart = System.currentTimeMillis();
+        String ret;
+
+        try (PrintWriter writer = new PrintWriter(callTempFileName, "UTF-8")) {
+            int page = 1;
+            int numBlockRecipients = 0;
+            long numRecipients = 0;
+            do {
+                List<Recipient> recipients = recipientDataService.findByDaySlot(day, slot,
+                        new QueryParams(page, MAX_RECIPIENT_BLOCK));
+                numBlockRecipients = recipients.size();
+
+                for (Recipient recipient : recipients) {
+                    writer.print(recipientDataService.getDetachedField(recipient, "id"));
+                    writer.print(",");
+                    writer.print(recipient.getPhone());
+                    writer.print(",");
+                    writer.print(recipient.pregnancyWeek());
+                    writer.print(",");
+                    writer.println(recipient.getLanguage());
+                }
+
+                page++;
+                numRecipients += numBlockRecipients;
+
+                if (numBlockRecipients > 0) {
+                    long millis = System.currentTimeMillis() - milliStart;
+                    float rate = (float) numRecipients * MILLIS_PER_SECOND / millis;
+                    logger.info(String.format("Read %d %s @ %s/sec", numRecipients,
+                            numRecipients == 1 ? "recipient" : "recipients", rate));
+                }
+            } while (numBlockRecipients > 0);
+
+            long millis = System.currentTimeMillis() - milliStart;
+            float rate = (float) numRecipients * MILLIS_PER_SECOND / millis;
+
+            logger.info(String.format("Wrote %d %s to %s in %dms (%s/sec)", numRecipients,
+                    numRecipients == 1 ? "call" : "calls", callTempFileName, millis, rate));
+            ret = String.format("%s %d calls (%s/sec)", callFileName, numRecipients, rate);
+        } catch (FileNotFoundException | UnsupportedEncodingException e) {
+            String error = String.format("Unable to create temp call file %s: %s", callTempFileName, e.getMessage());
+            logger.error(error);
+            return error;
         }
-        else if (dateOrPeriod.matches(DURATION_REGEX)) {
-            Period period = new JodaFormatter().parsePeriod(fixPeriod(dateOrPeriod));
-            dt = DateTime.now().plus(period.toPeriod());
+
+        File fOld = new File(callFileName);
+        if (fOld.exists()) {
+            logger.info("Deleting old file {}...", callFileName);
+            fOld.delete();
         }
-        else {
-            throw new IllegalStateException(String.format("%s seems to be neither a datetime or a duration.",
-                    dateOrPeriod));
-        }
+        logger.info("Renaming temp file {} to {}...", callTempFileName, callFileName);
+        File fTmp = new File(callTempFileName);
+        fTmp.renameTo(new File(callFileName));
 
-        long slotRecipientCount =  recipientDataService.countFindByDaySlot(day, slot);
+        logger.info("Altering timestamp on {}...", callFileName);
+        File fCall = new File(callFileName);
+        fCall.setLastModified(fCall.lastModified()+1);
 
-        if (slotRecipientCount > 0) {
-
-            try (Jedis jedis = jedisPool.getResource()) {
-
-                long jobId = jedis.incr(REDIS_JOB_ID);
-
-                Map<String, Object> params = new HashMap<>();
-                params.put("JobID", String.valueOf(jobId));
-                params.put("day", day);
-                params.put("slot", slot);
-
-                MotechEvent motechEvent = new MotechEvent(JOB_EVENT, params);
-
-                RunOnceSchedulableJob runOnceSchedulableJob = new RunOnceSchedulableJob(motechEvent, dt.toDate());
-
-                JobId jobid = new RunOnceJobId(motechEvent);
-                logger.info(String.format("%s: day %s slot %s, %d recipients", jobid.toString(), day, slot, slotRecipientCount));
-
-                schedulerService.scheduleRunOnceJob(runOnceSchedulableJob);
-
-                return dt.toDate().toString();
-            }
-        } else {
-            return "No recipients!";
-        }
+        return ret;
     }
 
 
-    private static String redisJobExpectations(String jobId) {
-        return String.format("%s-expectations", jobId);
-    }
-
-
-    private static String redisJobExpecting(String jobId) {
-        return String.format("%s-expecting", jobId);
-    }
-
-
-    private static String redisJobTimer(String jobId) {
-        return String.format("%s-timer", jobId);
-    }
-
-
-    private static long redisTime(Jedis jedis) {
-        List<String> t = jedis.time();
-        return Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
-    }
-
-
-    private void setExpectations(String jobId, long count) {
-        logger.info("setExpectations({}, {})", jobId, count);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.set(redisJobExpectations(jobId), String.valueOf(count));
-            jedis.set(redisJobExpecting(jobId), String.valueOf(count));
-            jedis.del(redisJobTimer(jobId));
-        }
-    }
-
-
-
-    private void deleteRedisJob(Jedis jedis, String jobId) {
-        jedis.del(redisJobExpectations(jobId));
-        jedis.del(redisJobExpecting(jobId));
-        jedis.del(redisJobTimer(jobId));
-    }
-
-
-
-    private void meetExpectation(String jobId) {
-        logger.debug("meetExpectation({})", jobId);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-
-            // Start timer if not already started
-            if (!jedis.exists(redisJobTimer(jobId))) {
-                List<String> t = jedis.time();
-                jedis.setnx(redisJobTimer(jobId), String.valueOf(redisTime(jedis)));
-            }
-
-            long expecting = jedis.decr(redisJobExpecting(jobId));
-
-            // All expectations met
-            if (expecting <= 0) {
-                List<String> t = jedis.time();
-                long milliStop = redisTime(jedis);
-                long milliStart = Long.valueOf(jedis.get(redisJobTimer(jobId)));
-                long millis = milliStop - milliStart;
-                long expectations = Long.valueOf(jedis.get(redisJobExpectations(jobId)));
-                float rate = (float) expectations * MILLIS_PER_SECOND / millis;
-                logger.info("Measured {} calls at {} calls/second", expectations, rate);
-
-                deleteRedisJob(jedis, jobId);
-
-            } else if (expecting % 1000 == 0) {
-                long milliStop = redisTime(jedis);
-                long milliStart = Long.valueOf(jedis.get(redisJobTimer(jobId)));
-                long millis = milliStop - milliStart;
-                long expectations = Long.valueOf(jedis.get(redisJobExpectations(jobId)));
-                long count = expectations - expecting;
-                float rate = (float) count * MILLIS_PER_SECOND / millis;
-                logger.info(String.format("Expectations: %d/%d @ %f/s", expecting, expectations, rate));
-            }
-        }
-    }
-
-
-
-    public String getStatus() {
+    public String getRecipients() {
         StringBuilder sb = new StringBuilder();
         String sep = "";
-        try (Jedis jedis = jedisPool.getResource()) {
-            for (String expectationsKey : jedis.keys("*-expectations")) {
-                String jobId = expectationsKey.substring(0, expectationsKey.length() - "-expectations".length());
-                sb.append(sep);
-                sb.append(String.format("%s: %s/%s", jobId, jedis.get(redisJobExpectations(jobId)),
-                        jedis.get(redisJobExpecting(jobId))));
-                if (sep.isEmpty()) {
-                    sep = "\n\r";
-                }
-            }
-        }
 
         for (String day : dayList) {
             sb.append(sep);
@@ -376,81 +189,149 @@ public class Kil3ServiceImpl implements Kil3Service {
     }
 
 
-
-    public String deleteJob(long id) {
-        logger.info("deleteJob({})", id);
-
-        JobId jobId = new RunOnceJobId(JOB_EVENT, String.valueOf(id));
-        schedulerService.unscheduleJob(jobId);
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            deleteRedisJob(jedis, jobId.toString());
+    private int callStatusSlotIncrement(CallStatus callStatus) {
+        switch (callStatus) {
+            case NA:
+                return 2;
+            case ND:
+            case SO:
+                return 4;
+            default:
+                throw new IllegalArgumentException();
         }
-
-        return jobId.toString();
     }
 
 
+    private String nextSlot(String slot, CallStatus callStatus) {
+        int count = callStatusSlotIncrement(callStatus);
+        int s = (Integer.valueOf(slot) + count - 1) % 6;
+        return String.format("%d", s + 1);
+    }
 
-    public String deleteAllJobs() {
-        logger.info("deleteAllJobs()");
 
-        logger.info("deleting all redis job data");
-        try (Jedis jedis = jedisPool.getResource()) {
-            for (String key : jedis.keys(String.format("%s*", JOB_EVENT))) {
-                jedis.del(key);
+    private String nextDay(String day, String slot, CallStatus callStatus) {
+        int count = callStatusSlotIncrement(callStatus);
+        int s = Integer.valueOf(slot) + count;
+        int d = (Integer.valueOf(day) + (s > 6 ? 1 : 0)) % 7;
+        return String.format("%d", d);
+    }
+
+
+    private void addCallHistory(Recipient recipient, CallStatus callStatus, RecipientStatus recipientStatus) {
+        CallHistory recipientHistory = new CallHistory(recipient.getDay(), recipient.getSlot(), recipient.getCallStage(), recipient.getPhone(),
+                recipient.getLanguage(), recipient.getExpectedDeliveryDate(), callStatus, recipientStatus);
+        callHistoryDataService.create(recipientHistory);
+    }
+
+
+    @MotechListener(subjects = {PROCESS_ONE_CDR})
+    public void processOneCDR(MotechEvent event) {
+        logger.debug("processOneCDR(event={})", event.toString());
+
+        String line = (String)event.getParameters().get("CDR");
+        CallDetailRecord cdr = CallDetailRecord.fromString(line);
+        logger.debug("Processing slotting for {}...", cdr);
+
+        Recipient recipient = recipientDataService.findById(Long.parseLong(cdr.getRecipient()));
+        String day = recipient.getDay();
+        String slot = recipient.getSlot();
+        CallStatus callStatus = cdr.getCallStatus();
+
+        expectationService.meetExpectation("CDR");
+
+        if (CallStatus.OK == callStatus) {
+            if (recipient.getInitialDay().equals(day) && recipient.getInitialSlot().equals(slot)) {
+                addCallHistory(recipient, callStatus, RecipientStatus.AC);
+                return;
+            } else {
+                recipient.setDay(recipient.getInitialDay());
+                recipient.setSlot(recipient.getInitialSlot());
+            }
+        } else {
+            switch (recipient.getCallStage()) {
+                case FB:
+                    recipient.setCallStage(CallStage.R1);
+                    recipient.setDay(nextDay(day, slot, callStatus));
+                    recipient.setSlot(nextSlot(slot, callStatus));
+                    break;
+
+                case R1:
+                    recipient.setCallStage(CallStage.R2);
+                    recipient.setDay(nextDay(day, slot, callStatus));
+                    recipient.setSlot(nextSlot(slot, callStatus));
+                    break;
+
+                case R2:
+                    recipient.setCallStage(CallStage.R3);
+                    recipient.setDay(nextDay(day, slot, callStatus));
+                    recipient.setSlot(nextSlot(slot, callStatus));
+                    break;
+
+                case R3:
+                    recipient.setCallStage(CallStage.FB);
+                    recipient.setDay(recipient.getInitialDay());
+                    recipient.setSlot(recipient.getInitialSlot());
+                    break;
             }
         }
-
-        logger.info("deleting all scheduler jobs");
-        schedulerService.safeUnscheduleAllJobs(JOB_EVENT);
-
-        return "OK";
+        recipientDataService.update(recipient);
+        addCallHistory(recipient, callStatus, RecipientStatus.AC);
     }
 
 
+    //
+    // This is simplistic. The real system should periodically deal with 'orphan' calls which were somehow not
+    // included in a CDR file and must be reslotted for their next week..
+    //
+    @MotechListener(subjects = { PROCESS_CDR_FILE })
+    public void processCDRFile(MotechEvent event) {
+        logger.info("processCDRFile(event={})", event.toString());
 
-    public String reload() {
-        logger.info("reload()");
+        String path = (String)event.getParameters().get("file");
 
-        slotList = readList("slot");
-        dayList = readList("day");
-        if (slotList.size() == 0) {
-            logger.error("No recipients in the database!!!");
-        }
-        logger.info("slot list: {}", slotList);
-        logger.info("day list: {}", dayList);
+        long milliStart = System.currentTimeMillis();
 
-        return "OK";
-    }
-
-
-
-    public String listJobs() {
-        logger.info("listJobs()");
-        StringBuilder sb = new StringBuilder("redis: [");
-        String sep = "";
-        try (Jedis jedis = jedisPool.getResource()) {
-            for (String key : jedis.keys(String.format("%s*", JOB_EVENT))) {
-                if (key.endsWith("-expectations")) {
-                    sb.append(sep);
-                    sb.append(key.substring(0, key.length()-"-expectations".length()));
-                    if (sep.isEmpty()) {
-                        sep = ",";
+        try(BufferedReader br = new BufferedReader(new FileReader(path))) {
+            String line;
+            int lineCount = 0;
+            int cdrCount = 0;
+            while ((line = br.readLine()) != null) {
+                try {
+                    if (Strings.isNullOrEmpty(line)) {
+                        logger.debug("{}({}): Skipping blank line", path, lineCount + 1);
+                        continue;
                     }
+                    Map<String, Object> eventParams = new HashMap<>();
+                    CallDetailRecord.validate(line);
+                    eventParams.put("CDR", line);
+                    MotechEvent motechEvent = new MotechEvent(PROCESS_ONE_CDR, eventParams);
+                    eventRelay.sendEventMessage(motechEvent);
+                    cdrCount++;
+                } catch (Exception e) {
+                    logger.error("{}({}): invalid CDR format", path, lineCount+1);
                 }
+                lineCount++;
             }
+
+            long millis = System.currentTimeMillis() - milliStart;
+            float rate = (float) cdrCount * MILLIS_PER_SECOND / millis;
+
+            logger.info(String.format("Read %d %s, dispatched %d %s (%s/sec)", lineCount,
+                    lineCount == 1 ? "line" : "lines", cdrCount, cdrCount == 1 ? "cdr" : "cdrs", rate));
+            expectationService.setExpectations("CDR", cdrCount);
+        } catch (IOException e) {
+            logger.error("Error while reading {}: {}", path, e.getMessage());
         }
-        sb.append("]\r\nscheduler: [");
-        sep = "";
-        for (JobBasicInfo info : schedulerService.getScheduledJobsBasicInfo()) {
-            sb.append(sep);
-            sb.append(info.getName());
-            if (sep.isEmpty()) {
-                sep = ",";
-            }
-        }
-        sb.append("]");
-        return sb.toString();
     }
+
+
+    public String processCallDetailRecords(String slot, String day) {
+        logger.debug("processCallDetailRecords(day={}, slot={})", day, slot);
+        Map<String, Object> eventParams = new HashMap<>();
+        eventParams.put("file", cdrFileName(day, slot));
+        MotechEvent motechEvent = new MotechEvent(PROCESS_CDR_FILE, eventParams);
+        eventRelay.sendEventMessage(motechEvent);
+        return "OK";
+    }
+
 }

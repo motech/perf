@@ -1,7 +1,10 @@
 package org.motechproject.kil3.database;
 
+import org.joda.time.DateTime;
+import org.joda.time.Period;
 import org.motechproject.mds.annotations.Entity;
 import org.motechproject.mds.annotations.Field;
+import org.motechproject.mds.annotations.Ignore;
 
 import javax.jdo.annotations.Column;
 import javax.jdo.annotations.Index;
@@ -115,6 +118,20 @@ public class Recipient {
     public void setExpectedDeliveryDate(String expectedDeliveryDate) {
         this.expectedDeliveryDate = expectedDeliveryDate;
     }
+
+
+    @Ignore
+    public String pregnancyWeek() {
+        int year =  Integer.valueOf(this.expectedDeliveryDate.substring(0, 4));
+        int month =  Integer.valueOf(this.expectedDeliveryDate.substring(4, 6));
+        int day =  Integer.valueOf(this.expectedDeliveryDate.substring(6, 8));
+        DateTime expectedDeliveryDate = new DateTime(year, month, day, 0, 0);
+        DateTime dtConception = expectedDeliveryDate.minusMonths(9);
+        Period period = new Period(dtConception, DateTime.now());
+        int week = period.getWeeks();
+        return String.format("%d", week);
+    }
+
 
     @Override
     public boolean equals(Object o) {

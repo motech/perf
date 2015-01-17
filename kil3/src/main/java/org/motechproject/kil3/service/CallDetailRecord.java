@@ -6,13 +6,11 @@ import java.io.Serializable;
 
 public class CallDetailRecord implements Serializable {
     private static final long serialVersionUID = -1706017553940100679L;
-    private String id;
     private String recipient;
     private String number;
     private CallStatus callStatus;
 
-    public CallDetailRecord(String id, String recipient, String number, CallStatus callStatus) {
-        this.id = id;
+    public CallDetailRecord(String recipient, String number, CallStatus callStatus) {
         this.recipient = recipient;
         this.number = number;
         this.callStatus = callStatus;
@@ -20,23 +18,15 @@ public class CallDetailRecord implements Serializable {
 
     public static void validate(String string) throws Exception {
         String[] fields = string.split("\\s*,\\s*");
-        if (fields.length != 4) {
+        if (fields.length != 3) {
             throw new Exception("Invalid CDR");
         }
-        CallStatus.valueOf(fields[3]);
+        CallStatus.valueOf(fields[2]);
     }
 
     public static CallDetailRecord fromString(String string) {
         String[] fields = string.split("\\s*,\\s*");
-        return new CallDetailRecord(fields[0], fields[1], fields[2], CallStatus.valueOf(fields[3]));
-    }
-
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
+        return new CallDetailRecord(fields[0], fields[1], CallStatus.valueOf(fields[2]));
     }
 
     public String getRecipient() {
@@ -70,7 +60,6 @@ public class CallDetailRecord implements Serializable {
 
         CallDetailRecord that = (CallDetailRecord) o;
 
-        if (!id.equals(that.id)) return false;
         if (!number.equals(that.number)) return false;
         if (!recipient.equals(that.recipient)) return false;
         if (!callStatus.equals(that.callStatus)) return false;
@@ -80,8 +69,7 @@ public class CallDetailRecord implements Serializable {
 
     @Override
     public int hashCode() {
-        int result = id.hashCode();
-        result = 31 * result + recipient.hashCode();
+        int result = recipient.hashCode();
         result = 31 * result + number.hashCode();
         result = 31 * result + callStatus.hashCode();
         return result;
@@ -90,8 +78,7 @@ public class CallDetailRecord implements Serializable {
     @Override
     public String toString() {
         return "CallDetailRecord{" +
-                "id='" + id + '\'' +
-                ", recipient='" + recipient + '\'' +
+                "recipient='" + recipient + '\'' +
                 ", number='" + number + '\'' +
                 ", callStatus='" + callStatus + '\'' +
                 '}';

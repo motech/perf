@@ -37,18 +37,13 @@
         </constructor-arg>
     </bean>
 
-    <osgi:reference id="configurationService" interface="org.motechproject.config.service.ConfigurationService"/>
-
     <osgi:service ref="kil3Service" interface="org.motechproject.kil3.service.Kil3Service" />
-    <osgi:service ref="CDRService" interface="org.motechproject.kil3.service.CDRService" />
+    <osgi:service ref="expectationService" interface="org.motechproject.kil3.service.ExpectationService" />
 
-    <osgi:reference id="eventRelay" interface="org.motechproject.event.listener.EventRelay"/>
-
-    <osgi:reference id="ivrOutboundCallService" interface="org.motechproject.ivr.service.OutboundCallService"/>
-
+    <osgi:reference id="configurationService" interface="org.motechproject.config.service.ConfigurationService"/>
     <osgi:reference id="recipientDataService" interface="org.motechproject.kil3.database.RecipientDataService"/>
     <osgi:reference id="callHistoryDataService" interface="org.motechproject.kil3.database.CallHistoryDataService"/>
-
+    <osgi:reference id="eventRelay" interface="org.motechproject.event.listener.EventRelay"/>
     <osgi:reference id="schedulerService" interface="org.motechproject.scheduler.service.MotechSchedulerService"/>
 
 </beans>
