@@ -1,4 +1,16 @@
+Flask==0.10.1
+Jinja2==2.7.3
+MarkupSafe==0.23
 PyYAML==3.11
+Werkzeug==0.9.6
 argh==0.26.1
+argparse==1.2.1
+fake-factory==0.4.2
+hiredis==0.1.5
+influxdb==0.1.12
+itsdangerous==0.24
 pathtools==0.1.2
+redis==2.10.3
+requests==2.5.1
 watchdog==0.8.2
+wsgiref==0.1.2
