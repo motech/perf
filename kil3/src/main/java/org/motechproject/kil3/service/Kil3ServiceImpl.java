@@ -1,6 +1,11 @@
 package org.motechproject.kil3.service;
 
 import com.google.common.base.Strings;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.motechproject.event.MotechEvent;
 import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
@@ -17,16 +22,15 @@ import org.springframework.stereotype.Service;
 
 import javax.jdo.Query;
 import java.io.*;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.net.URISyntaxException;
+import java.util.*;
 
 
 @Service("kil3Service")
 public class Kil3ServiceImpl implements Kil3Service {
 
     private final static String CALL_DIRECTORY = "kil3.call_directory";
+    private final static String CALL_SERVER_URL = "kil3.call_server_url";
     private final static String CDR_DIRECTORY = "kil3.cdr_directory";
     private static final String PROCESS_CDR_FILE = "process_cdr_file";
     private static final String PROCESS_ONE_CDR = "process_one_cdr";
@@ -91,6 +95,37 @@ public class Kil3ServiceImpl implements Kil3Service {
 
     private String callTempFileName(String day, String slot) {
         return String.format("%s~", callFileName(day, slot));
+    }
+
+
+    private void sendCallHttpRequest(String day, String slot) {
+        logger.debug("sendCallHttpRequest(day={}, slot={})", day, slot);
+
+        String uri = String.format("%s/call?day=%s&slot=%s", settingsFacade.getProperty(CALL_SERVER_URL), day, slot);
+
+        HttpUriRequest request;
+        URIBuilder builder;
+        try {
+            builder = new URIBuilder(uri);
+            builder.setParameter("day", day);
+            builder.setParameter("slot", slot);
+            request = new HttpGet(builder.build());
+        } catch (URISyntaxException e) {
+            String message = "Unexpected error creating a URI";
+            logger.warn(message);
+            throw new IllegalStateException(message, e);
+        }
+
+        logger.debug("Generated {}", request.toString());
+
+        HttpResponse response;
+        try {
+            response = new DefaultHttpClient().execute(request);
+        } catch (IOException e) {
+            String message = String.format("Could not initiate call, unexpected exception: %s", e.toString());
+            logger.warn(message);
+            throw new IllegalStateException(message, e);
+        }
     }
 
 
@@ -164,6 +199,9 @@ public class Kil3ServiceImpl implements Kil3Service {
         logger.info("Altering timestamp on {}...", callFileName);
         File fCall = new File(callFileName);
         fCall.setLastModified(fCall.lastModified()+1);
+
+        logger.info("Informing the IVR system the call file is available...");
+        sendCallHttpRequest(day, slot);
 
         return ret;
     }
@@ -290,11 +328,11 @@ public class Kil3ServiceImpl implements Kil3Service {
         String path = (String)event.getParameters().get("file");
 
         long milliStart = System.currentTimeMillis();
+        List<String> cdrs = new ArrayList<>();
 
         try(BufferedReader br = new BufferedReader(new FileReader(path))) {
             String line;
             int lineCount = 0;
-            int cdrCount = 0;
             while ((line = br.readLine()) != null) {
                 try {
                     if (Strings.isNullOrEmpty(line)) {
@@ -303,10 +341,7 @@ public class Kil3ServiceImpl implements Kil3Service {
                     }
                     Map<String, Object> eventParams = new HashMap<>();
                     CallDetailRecord.validate(line);
-                    eventParams.put("CDR", line);
-                    MotechEvent motechEvent = new MotechEvent(PROCESS_ONE_CDR, eventParams);
-                    eventRelay.sendEventMessage(motechEvent);
-                    cdrCount++;
+                    cdrs.add(line);
                 } catch (Exception e) {
                     logger.error("{}({}): invalid CDR format", path, lineCount+1);
                 }
@@ -314,13 +349,37 @@ public class Kil3ServiceImpl implements Kil3Service {
             }
 
             long millis = System.currentTimeMillis() - milliStart;
-            float rate = (float) cdrCount * MILLIS_PER_SECOND / millis;
+            float rate = (float) lineCount * MILLIS_PER_SECOND / millis;
 
-            logger.info(String.format("Read %d %s, dispatched %d %s (%s/sec)", lineCount,
-                    lineCount == 1 ? "line" : "lines", cdrCount, cdrCount == 1 ? "cdr" : "cdrs", rate));
-            expectationService.setExpectations("CDR", cdrCount);
+            logger.info(String.format("Read %d %s in %ss @ (%s/sec)", lineCount, lineCount == 1 ? "line" : "lines",
+                    millis / 1000, rate));
         } catch (IOException e) {
             logger.error("Error while reading {}: {}", path, e.getMessage());
+        }
+
+        expectationService.setExpectations("CDR", cdrs.size());
+
+        milliStart = System.currentTimeMillis();
+        int cdrCount = 0;
+        for (String line : cdrs) {
+            Map<String, Object> eventParams = new HashMap<>();
+            eventParams.put("CDR", line);
+            MotechEvent motechEvent = new MotechEvent(PROCESS_ONE_CDR, eventParams);
+            eventRelay.sendEventMessage(motechEvent);
+            //processOneCDR(motechEvent);
+            cdrCount++;
+            if (cdrCount % 10000 == 0) {
+                long millis = System.currentTimeMillis() - milliStart;
+                float rate = (float) cdrCount * MILLIS_PER_SECOND / millis;
+                logger.info(String.format("Queued %d cdrs for processing in %ss @ (%s/sec)", cdrCount, millis / 1000,
+                        rate));
+            }
+        }
+        long millis = System.currentTimeMillis() - milliStart;
+        float rate = (float) cdrs.size() * MILLIS_PER_SECOND / millis;
+        if (cdrCount % 10000 != 0) {
+            logger.info(String.format("Queued %d %s for processing in %ss @ (%s/sec)", cdrs.size(),
+                    cdrs.size() == 1 ? "cdr" : "cdrs", millis / 1000, rate));
         }
     }
 
@@ -331,6 +390,7 @@ public class Kil3ServiceImpl implements Kil3Service {
         eventParams.put("file", cdrFileName(day, slot));
         MotechEvent motechEvent = new MotechEvent(PROCESS_CDR_FILE, eventParams);
         eventRelay.sendEventMessage(motechEvent);
+        //processCDRFile(motechEvent);
         return "OK";
     }
 
