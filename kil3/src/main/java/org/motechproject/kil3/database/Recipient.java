@@ -10,8 +10,12 @@ import javax.jdo.annotations.Column;
 import javax.jdo.annotations.Index;
 
 @Entity
-@Index(name="RECIPIENT_DAY_SLOT", members={"day", "slot"})
+@Index(name="RECIPIENT_DAY_STATUS", members={"day", "status"})
 public class Recipient {
+    @Field
+    @Column(name="status", jdbcType="VARCHAR", length=2)
+    private RecipientStatus status;
+
     @Field
     @Column(name="initialDay", jdbcType="VARCHAR", length=1)
     private String initialDay;
@@ -19,14 +23,6 @@ public class Recipient {
     @Field
     @Column(name="day", jdbcType="VARCHAR", length=1)
     private String day;
-
-    @Field
-    @Column(name="initialSlot", jdbcType="VARCHAR", length=2)
-    private String initialSlot;
-
-    @Field
-    @Column(name="slot", jdbcType="VARCHAR", length=2)
-    private String slot;
 
     @Field
     @Column(name="callStage", jdbcType="VARCHAR", length=9)
@@ -47,12 +43,18 @@ public class Recipient {
     public Recipient(String initialDay, String day, String initialSlot, String slot, CallStage callStage, String phone, String language, String expectedDeliveryDate) {
         this.initialDay = initialDay;
         this.day = day;
-        this.initialSlot = initialSlot;
-        this.slot = slot;
         this.callStage = callStage;
         this.phone = phone;
         this.language = language;
         this.expectedDeliveryDate = expectedDeliveryDate;
+    }
+
+    public RecipientStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(RecipientStatus status) {
+        this.status = status;
     }
 
     public String getInitialDay() {
@@ -69,22 +71,6 @@ public class Recipient {
 
     public void setDay(String day) {
         this.day = day;
-    }
-
-    public String getInitialSlot() {
-        return initialSlot;
-    }
-
-    public void setInitialSlot(String initialSlot) {
-        this.initialSlot = initialSlot;
-    }
-
-    public String getSlot() {
-        return slot;
-    }
-
-    public void setSlot(String slot) {
-        this.slot = slot;
     }
 
     public CallStage getCallStage() {
@@ -133,6 +119,13 @@ public class Recipient {
     }
 
 
+    @Ignore
+    public void incDay() {
+        int d = Integer.valueOf(day);
+        day = String.format("%d", d >= 7 ? 1 : d+1);
+    }
+
+
     @Override
     public boolean equals(Object o) {
         if (this == o) { return true; }
@@ -144,20 +137,17 @@ public class Recipient {
         if (!day.equals(recipient.day)) { return false; }
         if (!expectedDeliveryDate.equals(recipient.expectedDeliveryDate)) { return false; }
         if (!initialDay.equals(recipient.initialDay)) { return false; }
-        if (!initialSlot.equals(recipient.initialSlot)) { return false; }
         if (!language.equals(recipient.language)) { return false; }
         if (!phone.equals(recipient.phone)) { return false; }
-        if (!slot.equals(recipient.slot)) { return false; }
 
         return true;
     }
 
     @Override
     public int hashCode() {
-        int result = initialDay.hashCode();
+        int result = status.hashCode();
+        result = 31 * result + initialDay.hashCode();
         result = 31 * result + day.hashCode();
-        result = 31 * result + initialSlot.hashCode();
-        result = 31 * result + slot.hashCode();
         result = 31 * result + callStage.hashCode();
         result = 31 * result + phone.hashCode();
         result = 31 * result + language.hashCode();
@@ -168,10 +158,9 @@ public class Recipient {
     @Override
     public String toString() {
         return "Recipient{" +
-                "initialDay='" + initialDay + '\'' +
+                "status='" + status + '\'' +
+                ", initialDay='" + initialDay + '\'' +
                 ", day='" + day + '\'' +
-                ", initialSlot='" + initialSlot + '\'' +
-                ", slot='" + slot + '\'' +
                 ", callStage=" + callStage +
                 ", phone='" + phone + '\'' +
                 ", language='" + language + '\'' +

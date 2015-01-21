@@ -38,7 +38,6 @@
     </bean>
 
     <osgi:service ref="kil3Service" interface="org.motechproject.kil3.service.Kil3Service" />
-    <osgi:service ref="expectationService" interface="org.motechproject.kil3.service.ExpectationService" />
 
     <osgi:reference id="configurationService" interface="org.motechproject.config.service.ConfigurationService"/>
     <osgi:reference id="recipientDataService" interface="org.motechproject.kil3.database.RecipientDataService"/>

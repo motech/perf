@@ -10,17 +10,14 @@ import java.util.List;
 public interface RecipientDataService extends MotechDataService<Recipient> {
 
     @Lookup
-    List<Recipient> findByDaySlot(
-            @LookupField(name = "day") String day,
-            @LookupField(name = "slot") String slot);
+    List<Recipient> findByDay(
+            @LookupField(name = "day") String day);
 
     @Lookup
-    List<Recipient> findByDaySlot(
+    List<Recipient> findByDay(
             @LookupField(name = "day") String day,
-            @LookupField(name = "slot") String slot,
             QueryParams queryParams);
 
-    long countFindByDaySlot(
-            @LookupField(name = "day") String day,
-            @LookupField(name = "slot") String slot);
+    long countFindByDay(
+            @LookupField(name = "day") String day);
 }

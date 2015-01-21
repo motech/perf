@@ -52,16 +52,16 @@ public class Kil3Controller {
 
 
     /*
-     * /call/{day}/{slot}
+     * /call/{day}
      *
-     * Creates the call file for the given day/slot
+     * Creates the call file for the given day
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/call/{day}/{slot}")
-    public String createCallFile(@PathVariable String day, @PathVariable String slot) {
-        return kil3Service.createCallFile(day, slot);
+    @RequestMapping(value = "/call/{day}")
+    public String createCallFile(@PathVariable String day) {
+        return kil3Service.createCallFile(day);
     }
 
 
@@ -83,18 +83,18 @@ public class Kil3Controller {
 
 
     /*
-     * /cdr/{day}/{slot}
+     * /cdr/{day}
      *
-     * download and process call detail records for given day/slot
+     * download and process call detail records for given day
      *
      * returns 'OK'
      *
      */
     @ResponseStatus(HttpStatus.OK)
     @ResponseBody
-    @RequestMapping(value = "/cdr/{day}/{slot}")
-    public String process(@PathVariable String day, @PathVariable String slot) {
-        return kil3Service.processCallDetailRecords(day, slot);
+    @RequestMapping(value = "/cdr/{day}")
+    public String process(@PathVariable String day) {
+        return kil3Service.processCallDetailRecords(day);
     }
 
 

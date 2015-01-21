@@ -12,10 +12,6 @@ public class CallHistory {
     private String day;
 
     @Field
-    @Column(name="slot", jdbcType="VARCHAR", length=2)
-    private String slot;
-
-    @Field
     @Column(name="callStage", jdbcType="VARCHAR", length=9)
     private CallStage callStage;
 
@@ -35,9 +31,8 @@ public class CallHistory {
     @Column(name="recipientStatus", jdbcType="VARCHAR", length=2)
     private RecipientStatus recipientStatus;
 
-    public CallHistory(String day, String slot, CallStage callStage, String phone, String language, String expectedDeliveryDate, CallStatus callStatus, RecipientStatus recipientStatus) {
+    public CallHistory(String day, CallStage callStage, String phone, String language, String expectedDeliveryDate, CallStatus callStatus, RecipientStatus recipientStatus) {
         this.day = day;
-        this.slot = slot;
         this.callStage = callStage;
         this.phone = phone;
         this.language = language;
@@ -74,9 +69,6 @@ public class CallHistory {
         if (recipientStatus != that.recipientStatus) {
             return false;
         }
-        if (!slot.equals(that.slot)) {
-            return false;
-        }
 
         return true;
     }
@@ -84,7 +76,6 @@ public class CallHistory {
     @Override
     public int hashCode() {
         int result = day.hashCode();
-        result = 31 * result + slot.hashCode();
         result = 31 * result + callStage.hashCode();
         result = 31 * result + phone.hashCode();
         result = 31 * result + language.hashCode();
