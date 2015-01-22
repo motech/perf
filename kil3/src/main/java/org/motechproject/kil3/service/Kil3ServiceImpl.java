@@ -294,7 +294,7 @@ public class Kil3ServiceImpl implements Kil3Service {
 
         for (String day : dayList) {
             sb.append(sep);
-            sb.append(String.format("%8d", (int) recipientDataService.countFindByDay(day)));
+            sb.append(recipientDataService.countFindByDay(day));
             if (sep.isEmpty()) {
                 sep = " ";
             }
