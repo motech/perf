@@ -149,24 +149,6 @@ public class Kil3ServiceImpl implements Kil3Service {
     }
 
 
-    public String getStatus() {
-        StringBuilder sb = new StringBuilder();
-        String sep = "";
-        try (Jedis jedis = jedisPool.getResource()) {
-            for (String expectationsKey : jedis.keys("*-expectations")) {
-                String jobId = expectationsKey.substring(0, expectationsKey.length() - "-expectations".length());
-                sb.append(sep);
-                sb.append(String.format("%s: %s/%s", jobId, jedis.get(redisJobExpectations(jobId)),
-                        jedis.get(redisJobExpecting(jobId))));
-                if (sep.isEmpty()) {
-                    sep = "\n\r";
-                }
-            }
-        }
-        return sb.toString();
-    }
-
-    
     private String callFileName(String day) {
         return String.format("%sday%s-calls.csv", settingsFacade.getProperty(CALL_DIRECTORY), day);
     }
@@ -302,6 +284,7 @@ public class Kil3ServiceImpl implements Kil3Service {
     }
 
     public String getRecipients() {
+        LOGGER.debug("getRecipients()");
         StringBuilder sb = new StringBuilder();
         String sep = "";
 

@@ -1,6 +1,8 @@
 package org.motechproject.kil3.web;
 
 import org.motechproject.kil3.service.Kil3Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
@@ -9,6 +11,8 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Map;
 
 /**
@@ -20,7 +24,7 @@ public class Kil3Controller {
     private Kil3Service kil3Service;
     private final RequestMappingHandlerMapping handlerMapping;
 
-    private final static long MILLIS_PER_SECOND = 1000;
+    private Logger LOGGER = LoggerFactory.getLogger(Kil3Controller.class);
 
 
 
@@ -41,7 +45,23 @@ public class Kil3Controller {
     @ResponseBody
     @RequestMapping(value = "/")
     public String showHelp() {
-        StringBuilder sb = new StringBuilder();
+
+        String hostName = "";
+        try {
+            InetAddress ip = InetAddress.getLocalHost();
+            hostName = ip.getHostName();
+        } catch (UnknownHostException e) {
+            throw new RuntimeException("Could not get instance name: " + e.toString(), e);
+        }
+        LOGGER.error("");
+        LOGGER.error("");
+        LOGGER.error("");
+        LOGGER.error("Hello from '{}'", hostName);
+        LOGGER.error("");
+        LOGGER.error("");
+        LOGGER.error("");
+
+        StringBuilder sb = new StringBuilder(String.format("Motech node: '%s'\n", hostName));
         for (Map.Entry<RequestMappingInfo, HandlerMethod> entry  : this.handlerMapping.getHandlerMethods().entrySet()) {
             sb.append(entry.getKey().getPatternsCondition().getPatterns().toArray()[0]);
             sb.append("\n");
