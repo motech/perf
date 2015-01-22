@@ -12,7 +12,6 @@ import org.motechproject.event.listener.EventRelay;
 import org.motechproject.event.listener.annotations.MotechListener;
 import org.motechproject.kil3.database.*;
 import org.motechproject.mds.query.QueryParams;
-import org.motechproject.mds.query.SqlQueryExecution;
 import org.motechproject.scheduler.contract.RunOnceSchedulableJob;
 import org.motechproject.scheduler.service.MotechSchedulerService;
 import org.motechproject.server.config.SettingsFacade;
@@ -25,7 +24,6 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
-import javax.jdo.Query;
 import java.io.*;
 import java.net.URISyntaxException;
 import java.util.*;
@@ -37,6 +35,7 @@ public class Kil3ServiceImpl implements Kil3Service {
     private final static String CALL_DIRECTORY = "kil3.call_directory";
     private final static String CALL_SERVER_URL = "kil3.call_server_url";
     private final static String CDR_DIRECTORY = "kil3.cdr_directory";
+    private static final String CREATE_CALL_FILE = "create_call_file";
     private static final String PROCESS_CDR_FILE = "process_cdr_file";
     private static final String PROCESS_ONE_CDR = "process_one_cdr";
     private static final Integer MAX_RECIPIENT_BLOCK = 10000;
@@ -204,7 +203,8 @@ public class Kil3ServiceImpl implements Kil3Service {
 
         HttpResponse response;
         try {
-            response = new DefaultHttpClient().execute(request);
+            DefaultHttpClient client = new DefaultHttpClient();
+             response = client.execute(request);
         } catch (IOException e) {
             String message = String.format("Could not initiate call, unexpected exception: %s", e.toString());
             LOGGER.warn(message);
@@ -213,12 +213,11 @@ public class Kil3ServiceImpl implements Kil3Service {
     }
 
 
-    public String createCallFile(String day) {
-        LOGGER.info("createCallFile(day={})", day);
+    @MotechListener(subjects = { CREATE_CALL_FILE })
+    public void handleCreateCallFile(MotechEvent event) {
+        LOGGER.info("handleCreateCallFile(event={})", event.toString());
 
-        if (!dayList.contains(day)) {
-            return String.format("%s is not a valid day. Valid days: %s", day, dayList);
-        }
+        String day = (String)event.getParameters().get("day");
 
         String callFileName = callFileName(day);
         String callTempFileName = callTempFileName(day);
@@ -265,7 +264,7 @@ public class Kil3ServiceImpl implements Kil3Service {
         } catch (FileNotFoundException | UnsupportedEncodingException e) {
             String error = String.format("Unable to create temp call file %s: %s", callTempFileName, e.getMessage());
             LOGGER.error(error);
-            return error;
+            return;
         }
 
         File fOld = new File(callFileName);
@@ -283,10 +282,24 @@ public class Kil3ServiceImpl implements Kil3Service {
 
         LOGGER.info("Informing the IVR system the call file is available...");
         sendCallHttpRequest(day);
-
-        return ret;
     }
 
+
+    public String createCallFile(String day) {
+        LOGGER.info("createCallFile(day={})", day);
+
+        if (!dayList.contains(day)) {
+            return String.format("%s is not a valid day. Valid days: %s", day, dayList);
+        }
+
+        Map<String, Object> eventParams = new HashMap<>();
+        eventParams.put("day", day);
+        MotechEvent motechEvent = new MotechEvent(CREATE_CALL_FILE, eventParams);
+        schedulerService.safeScheduleRunOnceJob(new RunOnceSchedulableJob(motechEvent,
+                DateTime.now().plusSeconds(1).toDate()));
+
+        return "OK";
+    }
 
     public String getRecipients() {
         StringBuilder sb = new StringBuilder();

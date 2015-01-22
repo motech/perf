@@ -10,7 +10,7 @@ import urllib
 import argparse
 
 
-cdr_url_template = "{}/module/kil3/cdr/{}/{}"
+cdr_url_template = "{}/module/kil3/cdr/{}"
 call_status_types = {'OK': 159, 'NA': 106, 'SO': 717, 'ND': 16}
 call_status_choices = []
 for key, value in call_status_types.iteritems():
@@ -28,8 +28,8 @@ call_file_name = lambda day: "{}/day{}-calls.csv".format(args.call_dir, day)
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--server", help="url of the Motech server",
                     default="http://localhost:8080/motech-platform-server")
-parser.add_argument("-d", "--cdr_dir", help="cdr directory", default="/xfer/cdr")
-parser.add_argument("-l", "--call_dir", help="call directory", default="/xfer/call")
+parser.add_argument("-d", "--cdr_dir", help="cdr directory", default="/media/xfer/cdr")
+parser.add_argument("-l", "--call_dir", help="call directory", default="/media/xfer/call")
 args = parser.parse_args()
 
 
