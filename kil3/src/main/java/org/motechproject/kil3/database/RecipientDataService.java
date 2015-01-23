@@ -11,13 +11,13 @@ public interface RecipientDataService extends MotechDataService<Recipient> {
 
     @Lookup
     List<Recipient> findByDay(
-            @LookupField(name = "day") String day);
+            @LookupField(name = "day") String day, @LookupField(name = "status") RecipientStatus status);
 
     @Lookup
     List<Recipient> findByDay(
-            @LookupField(name = "day") String day,
+            @LookupField(name = "day") String day, @LookupField(name = "status") RecipientStatus status,
             QueryParams queryParams);
 
     long countFindByDay(
-            @LookupField(name = "day") String day);
+            @LookupField(name = "day") String day, @LookupField(name = "status") RecipientStatus status);
 }

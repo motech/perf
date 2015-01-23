@@ -84,6 +84,11 @@ public class Kil3ServiceImpl implements Kil3Service {
     }
 
 
+    private static String redisInstantJobTimer(String jobId) {
+        return String.format("%s-instant-timer", jobId);
+    }
+
+
     private static long redisTime(Jedis jedis) {
         List<String> t = jedis.time();
         return Long.valueOf(t.get(0)) * 1000 + Long.valueOf(t.get(1)) / 1000;
@@ -110,6 +115,7 @@ public class Kil3ServiceImpl implements Kil3Service {
             if (!jedis.exists(redisJobTimer(jobId))) {
                 List<String> t = jedis.time();
                 jedis.setnx(redisJobTimer(jobId), String.valueOf(redisTime(jedis)));
+                jedis.setnx(redisInstantJobTimer(jobId), String.valueOf(redisTime(jedis)));
             }
 
             long expecting = jedis.decr(redisJobExpecting(jobId));
@@ -127,7 +133,7 @@ public class Kil3ServiceImpl implements Kil3Service {
                 } else {
                     long expectations = Long.valueOf(expectationsString);
                     float rate = (float) expectations * MILLIS_PER_SECOND / millis;
-                    LOGGER.info("Measured {} calls at {} calls/second", expectations, rate);
+                    LOGGER.info("Processed {} CDRs at {} CDRs/second", expectations, rate);
 
                     jedis.del(redisJobExpectations(jobId));
                     jedis.del(redisJobExpecting(jobId));
@@ -137,13 +143,21 @@ public class Kil3ServiceImpl implements Kil3Service {
             } else if (expecting % 1000 == 0) {
 
                 long milliStop = redisTime(jedis);
+
                 long milliStart = Long.valueOf(jedis.get(redisJobTimer(jobId)));
                 long millis = milliStop - milliStart;
                 long expectations = Long.valueOf(jedis.get(redisJobExpectations(jobId)));
                 long count = expectations - expecting;
                 float rate = (float) count * MILLIS_PER_SECOND / millis;
-                LOGGER.info(String.format("Expectations: %d/%d @ %f/s", expecting, expectations, rate));
 
+                milliStart = Long.valueOf(jedis.get(redisInstantJobTimer(jobId)));
+                millis = milliStop - milliStart;
+                float rateInstant = (float) 1000 * MILLIS_PER_SECOND / millis;
+
+                LOGGER.info(String.format("Expectations: %d/%d @ %f/s, %f/s", expecting, expectations, rateInstant,
+                        rate));
+
+                jedis.set(redisInstantJobTimer(jobId), String.valueOf(milliStop));
             }
         }
     }
@@ -212,7 +226,7 @@ public class Kil3ServiceImpl implements Kil3Service {
             int numBlockRecipients = 0;
             long numRecipients = 0;
             do {
-                List<Recipient> recipients = recipientDataService.findByDay(day,
+                List<Recipient> recipients = recipientDataService.findByDay(day, RecipientStatus.AC,
                         new QueryParams(page, MAX_RECIPIENT_BLOCK));
                 numBlockRecipients = recipients.size();
 
@@ -290,11 +304,13 @@ public class Kil3ServiceImpl implements Kil3Service {
 
         for (String day : dayList) {
             sb.append(sep);
-            sb.append(recipientDataService.countFindByDay(day));
+            sb.append(recipientDataService.countFindByDay(day, RecipientStatus.AC));
             if (sep.isEmpty()) {
                 sep = " ";
             }
         }
+        sb.append(sep);
+        sb.append(recipientDataService.count());
 
         return sb.toString();
     }
