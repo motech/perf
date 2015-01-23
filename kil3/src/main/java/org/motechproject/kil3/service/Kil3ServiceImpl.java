@@ -344,9 +344,17 @@ public class Kil3ServiceImpl implements Kil3Service {
         } else {
             switch (recipient.getCallStage()) {
                 case FB:
-                case R1:
-                case R2:
                     recipient.setCallStage(CallStage.R1);
+                    recipient.incDay();
+                    break;
+
+                case R1:
+                    recipient.setCallStage(CallStage.R2);
+                    recipient.incDay();
+                    break;
+
+                case R2:
+                    recipient.setCallStage(CallStage.R3);
                     recipient.incDay();
                     break;
 
